@@ -1,0 +1,19 @@
+# Host-side test dependencies (Windows, project venv).
+# Everything that needs the boards runs from here; builds and host unit tests
+# run in the container instead. See docs/CONTAINER.md.
+
+# E2E harness (L3/L5) -- Espressif's own, multi-DUT capable
+pytest~=8.3
+pytest-embedded~=1.12
+pytest-embedded-idf~=1.12
+pytest-embedded-serial-esp~=1.12
+
+# Serial access
+pyserial~=3.5
+
+# Analysis and charts (calibrator, movement test, log replay)
+numpy~=2.1
+matplotlib~=3.9
+
+# Binary protocol work
+construct~=2.10

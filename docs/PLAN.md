@@ -2,12 +2,13 @@
 
 > **Read this first.** This document is the index. Each phase has its own
 > self-contained document under `docs/phases/`. An agent assigned a phase should
-> read: this file (sections 1–7), `docs/HARDWARE_FINDINGS.md`,
-> `docs/WORKFLOW.md`, `docs/CONTAINER.md`, and its own phase document. Only read
-> other phase documents if the handoff section says to.
+> read: this file, `docs/HARDWARE_FINDINGS.md`, `docs/WORKFLOW.md`,
+> `docs/CONTAINER.md`, and its own phase document. Only read other phase
+> documents if the handoff section says to.
 >
 > **Before writing any code, read `docs/WORKFLOW.md`.** It contains the
-> branching rules, the merge gate, and the regression rule — all binding.
+> branching rules, the merge gate, the regression rule, and the required work
+> report — all binding.
 
 ---
 
@@ -35,8 +36,9 @@ Build a **3D indoor positioning system** from ESP32-C3 boards using Wi-Fi FTM
 | Espressif FTM console example | Built, flashed, end-to-end FTM verified |
 | Measured baseline at ~1.2 m separation | mean 1.22 m, 28–30/30 valid readings |
 | **Bench fixture: boards fixed 1.00 m apart** | Standing setup — tests may assert 1 m ground truth |
-| Git repository | Initialised, branch `main`, initial commit present |
-| Build/test container | **Not built** — Phase 0 deliverable, one open decision |
+| Git repository | Initialised, branch `main` |
+| Docker Desktop 4.82.0 + `ftm-dev` image | Installed; firmware build, Ceedling, IDF linux target all verified |
+| Python venv + test libs | Installed and verified |
 
 All hardware facts are in **`docs/HARDWARE_FINDINGS.md`**. That document is
 normative — do not re-derive these numbers, and do not contradict them without
@@ -49,18 +51,20 @@ ftm_measurement/
 ├── docs/
 │   ├── PLAN.md                   <- this file
 │   ├── HARDWARE_FINDINGS.md      <- verified measurements, normative
-│   ├── ARCHITECTURE.md           <- layering, strategy pattern, contracts
+│   ├── ARCHITECTURE.md           <- layering, swappable modules, contracts
+│   ├── RTOS.md                   <- tasks, queue, overflow policy
 │   ├── TESTING.md                <- test framework + worst-case catalogue
 │   ├── CONTAINER.md              <- container (build + host unit tests only)
-│   ├── PROTOCOL.md               <- telemetry sentences, fix quality, anchor count
-│   ├── WORKFLOW.md               <- git rules, merge gate, regression rule
+│   ├── PROTOCOL.md               <- ftmbin wire format (one serialiser)
+│   ├── WORKFLOW.md               <- git rules, merge gate, reports
 │   └── phases/
 │       ├── PHASE_0_test_infra.md
 │       ├── PHASE_1_bench_firmware.md
 │       ├── PHASE_2_calibrator.md
 │       ├── PHASE_3_definitive_firmware.md
-│       ├── PHASE_4_multi_station.md
-│       └── PHASE_5_e2e_and_manual.md
+│       ├── PHASE_4_protocol.md
+│       ├── PHASE_5_positioning.md
+│       └── PHASE_6_e2e_and_manual.md
 ├── tools/
 │   ├── bench_firmware/           <- Phase 1: board validation firmware
 │   ├── bench/                    <- Phase 1: host validation scripts
@@ -69,8 +73,9 @@ ftm_measurement/
 │   ├── domain/
 │   ├── services/
 │   └── drivers/
+├── docker/                       <- Phase 0: build/test container
 ├── main/
-└── test/
+└── tests/                        <- all committed tests (WORKFLOW.md §4)
 ```
 
 ## 4. Phase overview
@@ -79,18 +84,24 @@ Phases are ordered by dependency. Each is independently assignable.
 
 | Phase | Deliverable | Depends on | Doc |
 | --- | --- | --- | --- |
-| **0** | Test infrastructure + framework decision | — | [PHASE_0](phases/PHASE_0_test_infra.md) |
+| **0** | Container + test infrastructure | — | [PHASE_0](phases/PHASE_0_test_infra.md) |
 | **1** | Bench validation firmware in `tools/` | — | [PHASE_1](phases/PHASE_1_bench_firmware.md) |
 | **2** | Calibration firmware + tkinter UI → CSV | 1 | [PHASE_2](phases/PHASE_2_calibrator.md) |
 | **3** | Definitive layered firmware | 0, 2 | [PHASE_3](phases/PHASE_3_definitive_firmware.md) |
-| **4** | Multi-station scaling + trilateration | 3 | [PHASE_4](phases/PHASE_4_multi_station.md) |
-| **5** | E2E suite + human-in-loop movement test | 3, 4 | [PHASE_5](phases/PHASE_5_e2e_and_manual.md) |
+| **4** | Binary protocol + `.ftmlog` logging + replay | 3 | [PHASE_4](phases/PHASE_4_protocol.md) |
+| **5** | Positioning — host-first from logs, then target | 3, 4 | [PHASE_5](phases/PHASE_5_positioning.md) |
+| **6** | E2E suite + human-in-loop movement test | 3, 4, 5 | [PHASE_6](phases/PHASE_6_e2e_and_manual.md) |
 
 Phases 0 and 1 have no dependencies and may run in parallel.
 
-**Phase 0 contains a decision that requires human review before Phase 3 starts.**
-Do not begin Phase 3 until the test framework choice in `docs/TESTING.md` is
-approved.
+**Phase 4 exists so Phase 5 can be done offline.** The protocol, `.ftmlog`
+capture and replay tooling let the 3D algorithm be developed and proven on the
+host against recorded real measurements — with their real noise and drift —
+before any of it is compiled for the target. Phase 5 is then split: **5a host,
+5b target, one shared source file**.
+
+The container and all toolchains are installed and validated
+(`docs/CONTAINER.md` §8).
 
 ## 5. Non-negotiable constraints
 
@@ -104,28 +115,41 @@ These apply to every phase. An agent violating one should stop and flag it.
 3. **The layering in `docs/ARCHITECTURE.md` is mandatory**, including layers that
    are currently empty (`drivers/devices/`). Empty layers exist for
    standardisation and get a `README.md` explaining why they are empty.
-4. **Role selection (initiator vs responder) uses the Strategy pattern, selected
-   by Kconfig.** No `#ifdef` scattered through business logic.
-5. **Design for N anchors.** Two boards is the current test fixture, not the
+4. **Swappable modules follow one pattern** — interface vtable, Kconfig-selected
+   implementation, shared contract suite (`docs/ARCHITECTURE.md` §2). This
+   covers role selection and serialisation. No `#ifdef` scattered through
+   business logic.
+5. **Serialisation is a swappable module**, consuming domain snapshots and
+   producing bytes. It must not include a driver or ESP-IDF header, must not
+   allocate, and must not perform I/O. Every implementation passes the shared
+   contract suite (`docs/TESTING.md` §4.8).
+6. **The measurement task never blocks on transmission** (`docs/RTOS.md`). On
+   queue overflow the **oldest** entry is discarded so the freshest reading
+   always survives — this is a navigation system, and stale data is worse than
+   no data. Loss is made observable by a `msg_seq` gap plus a `dropped_total`
+   counter, both **diagnostic only**: navigation uses current data and never
+   waits for or reconstructs missing messages.
+7. **Design for N anchors.** Two boards is the current test fixture, not the
    architecture. With fewer than 4 usable anchors the system reports
    **`RANGE_ONLY`** — per-station distances — and never fabricates a 3D fix.
-   See `docs/ARCHITECTURE.md` §4.
-6. **Never hardcode calibration constants in logic.** They come from the
+8. **Fix status travels with the data.** Every cycle sends `NAV-STATUS` with
+   `fix_quality` and `num_anchors`. **Absence is information: no `NAV-POSITION`
+   message means no position.** Never emit a position message with placeholder
+   or zeroed coordinates — zero is a valid coordinate (`docs/PROTOCOL.md`).
+9. **Never hardcode calibration constants in logic.** They come from the
    generated calibration table (Phase 2 output).
-7. **Builds and host unit tests run in the container**; flashing, E2E and manual
-   tests run on Windows **inside the project venv** (`docs/CONTAINER.md`).
-   Never `pip install` into the system or IDF Python. The container never
-   touches the boards.
-10. **Fix status travels with the data.** Every cycle reports `fix_quality` and
-    `num_anchors`, NMEA-style. Consumers switch behaviour on `fix_quality`,
-    never on whether a position field happens to be populated
-    (`docs/PROTOCOL.md`).
-8. **Branch per feature; `main` is never committed to directly.** Merges are
-   human-approved after all tests pass and the results have been shown. See
-   `docs/WORKFLOW.md`.
-9. **Never weaken a pre-existing test to make your change pass.** If you break
-   a test you did not write, fix your implementation or stop and ask. This is
-   the regression rule in `docs/WORKFLOW.md` §3 and it is absolute.
+10. **Builds and host unit tests run in the container**; flashing, E2E and manual
+    tests run on Windows **inside the project venv** (`docs/CONTAINER.md`).
+    Never `pip install` into the system or IDF Python. The container never
+    touches the boards.
+11. **Branch per feature; `main` is never committed to directly.** Merges are
+    human-approved after all tests pass and the results have been shown.
+12. **Never weaken a pre-existing test to make your change pass.** If you break
+    a test you did not write, fix your implementation or stop and ask. This is
+    the regression rule in `docs/WORKFLOW.md` §3 and it is absolute.
+13. **Every branch ends with a work report** at `docs/reports/<branch>.md`
+    stating deviations and scope changes, and every commit carries the
+    `Co-Authored-By` model trailer (`docs/WORKFLOW.md` §5–6).
 
 ## 6. Environment setup (every agent needs this)
 
@@ -172,7 +196,7 @@ appear on the COM port, but every write times out.
 - **Read your phase doc fully before starting.** It lists preconditions,
   deliverables with exact paths, required tests, and acceptance criteria.
 - **Do not expand scope.** If a phase doc omits something you think is needed,
-  note it in the phase's "Open questions" section rather than building it.
+  record it in your work report (`docs/WORKFLOW.md` §6) rather than building it.
 - **Record measurements, don't assume them.** If you take a new hardware
   reading that contradicts `docs/HARDWARE_FINDINGS.md`, update that document and
   say so explicitly in your report.

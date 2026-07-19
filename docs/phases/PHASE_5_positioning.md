@@ -1,11 +1,11 @@
-# Phase 4 — Multi-Station Scaling & Trilateration
+# Phase 5 — Positioning: Host-First, Then Target
 
 | | |
 | --- | --- |
 | **Status** | Not started |
-| **Depends on** | Phase 3 |
-| **Blocks** | Phase 5 (movement test) |
-| **Read first** | `docs/PLAN.md` §1–5, `docs/ARCHITECTURE.md` §4, `docs/HARDWARE_FINDINGS.md` §2, §8 |
+| **Depends on** | Phase 3, Phase 4 (protocol + logs + replay) |
+| **Blocks** | Phase 6 (E2E and movement test) |
+| **Read first** | `docs/PLAN.md` (all), `docs/ARCHITECTURE.md` §4, `docs/PROTOCOL.md` (all), `docs/HARDWARE_FINDINGS.md` §2, §8, §10, `docs/WORKFLOW.md` (all) |
 
 ---
 
@@ -13,6 +13,44 @@
 
 Turn "one initiator measures one responder" into "one initiator measures N
 anchors and computes a 3D position".
+
+## The method: host first, target second
+
+**The 3D algorithm is developed and proven on the host against recorded logs
+before a line of it is compiled for the target.** This is the whole reason
+Phase 4 built the protocol, `.ftmlog` capture, and the replay tool.
+
+```
+Phase 4 logs  -->  host replay  -->  the SAME domain/core code  -->  position
+                                              |
+                                    proven, then compiled for target
+                                              |
+                                     firmware starts emitting NAV-POSITION
+```
+
+Two sub-phases, strictly ordered:
+
+### 5a — Host
+
+- Solver lives in `components/domain/core/` (pure C, zero ESP-IDF — this is what
+  makes it compile both natively and for the target).
+- Driven by `tools/proto/ftm_replay.py` over recorded `.ftmlog` files and over
+  simulated N≥4 geometries.
+- Validated entirely in the container. **No board involved.**
+- Ends when the solver is correct and every worst case in
+  `docs/TESTING.md` §4.3 passes.
+
+### 5b — Target
+
+- The **same source file**, now compiled into the firmware.
+- Firmware begins emitting `NAV-POSITION` — but only when `fix_quality >= 2`,
+  which with 2 boards **never happens**.
+- So 5b is validated by: the code builds for target, runs, and correctly
+  continues to emit **no** `NAV-POSITION`.
+
+**Do not write a separate host implementation.** A host prototype that is later
+"ported" tests nothing — the ported code is different code. One source, two
+compilation targets.
 
 ## The hardware reality, and the fallback rule
 
@@ -93,8 +131,10 @@ tests/sim/
 5. **Simulator** — generate synthetic measurements from a known geometry with
    configurable noise, including the 15 cm quantisation and the drift character
    from findings §8. This is how N≥4 gets exercised without hardware.
-   - The simulator must feed **the same domain code** as the firmware. A
-     simulator with its own copy of the maths tests nothing.
+   - The simulator must emit **real `.ftmlog` files in the Phase 4 binary
+     format**, so simulated and recorded data flow through an identical path.
+   - It must feed **the same domain code** as the firmware. A simulator with its
+     own copy of the maths tests nothing.
 6. **Visualisation** (`tools/viz/`) — must render **both** modes:
    - `RANGE_ONLY`: per-station distance readout — station label, distance, valid
      ratio, RSSI. A radial/bar layout works; the point is to see live numbers per
@@ -144,26 +184,43 @@ Plus all of `docs/TESTING.md` §4.8 (range-only fallback).
 
 ## Acceptance criteria
 
+**5a — host**
+
+- [ ] Solver lives in `domain/core/`, compiles natively, zero ESP-IDF includes.
+- [ ] Proven by replay over **real recorded** `.ftmlog` files from Phase 4.
+- [ ] Simulator emits real binary `.ftmlog`; simulated and recorded data share
+      one path.
+- [ ] All §4.3 / §4.5 / §4.8 worst cases pass; N=4..8 covered.
+- [ ] Trilateration returns position **and residual**, detects degeneracy.
+
+**5b — target**
+
+- [ ] The **same source file** compiled into firmware — no second
+      implementation.
+- [ ] Firmware emits `NAV-POSITION` only when `fix_quality >= 2`.
+- [ ] With 2 boards it emits **none**, and E2E proves that.
+
+**Both**
+
 - [ ] Anchor table driven by the generated calibration table; no hardcoded
       anchors.
 - [ ] Scheduler round-robins and marks partial cycles.
-- [ ] `RANGE_ONLY` / `POSITION_3D` mode is explicit in the output.
-- [ ] Trilateration returns position **and residual**, detects degeneracy.
-- [ ] Simulator exercises the **same** domain code as firmware.
-- [ ] All §4.3 / §4.5 / §4.8 worst cases tested; N=4..8 covered in simulation.
 - [ ] Visualisation renders both modes; 3D demonstrable from simulator input.
-- [ ] E2E at N=1 proves honest `RANGE_ONLY` with no fabricated position.
 - [ ] README states the ~1.5·N cycle time, the 2-board limit, and that 3D is
-      simulation-validated only.
-- [ ] Work on a `phase-4/...` branch; full test output reported
-      (`docs/WORKFLOW.md`).
+      **simulation- and replay-validated, not hardware-validated**.
+- [ ] Work on `phase-5a/...` and `phase-5b/...` branches; full test output
+      reported (`docs/WORKFLOW.md`).
 
-## Open questions
+## Deferred, with reasons
 
-- Should the initiator weight ranges by RSSI or valid-ratio in the solve?
-  Physically motivated, but adds a tuning parameter that cannot be validated
-  with 2 boards. Recommend deferring until ≥4 boards exist.
-- Is a Kalman/particle filter over successive fixes wanted, or is per-cycle
-  trilateration enough for this feasibility bench? Recommend per-cycle only for
-  now — drift (findings §8) would need characterising before a motion model is
-  trustworthy.
+Both of these are deferred deliberately. Do not implement them in this phase.
+
+- **Range weighting by RSSI or valid-ratio.** Physically motivated, but it adds
+  a tuning parameter that cannot be validated with 2 boards — the weights would
+  be fitted to simulation assumptions rather than to hardware. Revisit at
+  ≥ 4 boards.
+- **Kalman / particle filtering over successive fixes.** A motion model is only
+  trustworthy once the drift in `HARDWARE_FINDINGS.md` §8 is characterised;
+  applied before that, it would smooth drift and motion together and make the
+  two indistinguishable — destroying the very thing Phase 6 sets out to measure.
+  Per-cycle trilateration only, for now.

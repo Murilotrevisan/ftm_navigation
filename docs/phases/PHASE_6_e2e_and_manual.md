@@ -1,9 +1,9 @@
-# Phase 5 — E2E Suite & Human-in-Loop Movement Test
+# Phase 6 — E2E Suite & Human-in-Loop Movement Test
 
 | | |
 | --- | --- |
 | **Status** | Not started |
-| **Depends on** | Phase 3, Phase 4 |
+| **Depends on** | Phase 3, Phase 4 (protocol), Phase 5 (positioning) |
 | **Blocks** | Nothing — final phase |
 | **Read first** | `docs/PLAN.md` (all), `docs/TESTING.md` §5–6, `docs/HARDWARE_FINDINGS.md` §7–8, §10, `docs/WORKFLOW.md` (all), `docs/CONTAINER.md` (all) |
 
@@ -33,9 +33,13 @@ tests/e2e/
 ├── test_session.py         # Phase 3
 ├── test_role_strategy.py   # Phase 3
 ├── test_calibration.py     # Phase 2
-├── test_range_only.py      # Phase 4
+├── test_protocol.py        # Phase 4 — framing, checksums, zero NAV-POSITION
+├── test_range_only.py      # Phase 5 — RANGE_ONLY, no fabricated position
 └── README.md               # HOW TO RUN — exact commands, duration, troubleshooting
 ```
+
+The movement test records a `.ftmlog` (Phase 4 format), so its analysis reuses
+the Phase 4 decoder rather than a second parser.
 
 The movement test requires the operator to **move a board, breaking the fixed
 1.00 m fixture** (findings §10). Its README must instruct the operator to
@@ -93,20 +97,50 @@ The test **prints numbered, unambiguous instructions** and waits for ENTER
 between phases. Suggested sequence:
 
 ```
-1. Place the anchor (COM3) at a fixed point. Press ENTER.
-2. Place the initiator (COM4) at 1.0 m from the anchor, line of sight.
+--- Horizontal sweep ---
+1. Place the anchor at a fixed point. Press ENTER.
+2. Place the initiator at 1.0 m from the anchor, line of sight, SAME height.
    Measure with a tape. Enter the measured distance in cm, then ENTER.
 3. HOLD STILL for 60 seconds.                      [baseline / drift capture]
 4. Walk SLOWLY to 5.0 m over about 30 seconds.     [ramp]
 5. HOLD STILL for 60 seconds. Enter measured distance in cm.
 6. Walk SLOWLY back to 1.0 m over about 30 seconds.
 7. HOLD STILL for 60 seconds.
+
+--- Vertical (z) sweep ---
+8.  Return the initiator to 1.0 m horizontal, same height. HOLD 60 s.
+9.  RAISE the initiator by 1.0 m over about 20 seconds, keeping horizontal
+    distance fixed. Enter the measured height change in cm.
+10. HOLD STILL for 60 seconds.
+11. LOWER it back over about 20 seconds.
+12. HOLD STILL for 60 seconds.
 ```
 
-Phases 3, 5 and 7 are static; the two 60 s static blocks bracketing the movement
-are what let the analysis separate **drift** from **motion**.
+Static blocks bracket every movement; they are what let the analysis separate
+**drift** from **motion**. Recording runs continuously through all phases,
+including the walks.
 
-Recording runs continuously through all phases, including the walks.
+### Why the z sweep is worth doing with 2 boards
+
+It cannot produce a 3D fix — that needs ≥ 4 anchors. What it tests is whether
+**range responds to vertical displacement at all**, which is the precondition
+for 3D ever working.
+
+Raising the initiator 1.0 m at a fixed 1.0 m horizontal distance changes true
+slant range from 1.00 m to about 1.41 m: a 41 cm change, comfortably above the
+15 cm quantisation (`HARDWARE_FINDINGS.md` §3) but well inside the observed
+per-sample spread (§7). If that change is not detectable, no amount of anchor
+geometry will recover height, and that is a decisive negative result worth
+knowing before buying two more boards.
+
+Antenna orientation is a plausible confounder — keep the board's orientation
+fixed while changing height, and record its orientation in the report.
+
+Expected slant range for the geometry, for the analysis to compare against:
+
+```
+d = sqrt(horizontal² + height_change²)
+```
 
 ### Artefacts
 
@@ -134,14 +168,20 @@ see the chart:
     // ... ramp_up, static_5m, ramp_down, static_1m_return
   ],
   "transitions": [
-    { "from": "static_1m", "to": "static_5m",
+    { "from": "static_1m", "to": "static_5m", "axis": "horizontal",
       "expected_delta_cm": 400, "measured_delta_cm": 372,
-      "monotonic": true, "monotonic_violations": 2 }
+      "monotonic": true, "monotonic_violations": 2 },
+    { "from": "static_z0", "to": "static_z1m", "axis": "vertical",
+      "height_change_cm": 100, "horizontal_cm": 100,
+      "expected_slant_delta_cm": 41, "measured_delta_cm": 33,
+      "monotonic": true, "monotonic_violations": 4 }
   ],
   "verdict_inputs": {
-    "tracked_movement": true,
+    "tracked_horizontal_movement": true,
+    "tracked_vertical_movement": true,
     "static_drift_exceeds_movement": false,
-    "any_phase_valid_ratio_below_0_8": false
+    "any_phase_valid_ratio_below_0_8": false,
+    "antenna_orientation_note": "board upright, unchanged throughout"
   }
 }
 ```
@@ -151,8 +191,12 @@ see the chart:
 The test **does not pass/fail itself** — it produces evidence. State these
 criteria in the README so evaluation is consistent:
 
-1. **Tracking:** `measured_delta_cm` for each transition within ±30 % of
-   `expected_delta_cm`.
+1. **Tracking:** `measured_delta_cm` within ±30 % of `expected_delta_cm` for
+   horizontal transitions. For the **vertical** sweep compare against
+   `expected_slant_delta_cm` (≈41 cm for a 1 m rise at 1 m horizontal) — and
+   judge it more leniently, since the expected change is only ~2.7× the 15 cm
+   quantisation. A vertical result that is directionally right but noisy is a
+   pass; one showing no response at all is the significant finding.
 2. **Monotonicity:** ramp phases largely monotonic; a few violations are
    expected given the observed 0.75–1.65 m spread at a fixed 1.2 m (findings §7).
 3. **Drift vs. motion:** `drift_cm_per_min` in static phases must be **small
@@ -188,6 +232,8 @@ using **recorded transcripts** as fixtures:
 | Operator aborted mid-run | Partial JSON + chart written |
 | Non-monotonic ramp | Violations counted, not silently smoothed |
 | Missing operator reference | Handled; phase reported without `reference_cm` |
+| Vertical phases absent (operator stopped after step 7) | Horizontal result still valid and reported |
+| Vertical delta below quantisation | Reported as "no vertical response detected", not rounded to zero silently |
 
 ## Acceptance criteria
 
@@ -199,7 +245,9 @@ using **recorded transcripts** as fixtures:
       drift-dominated case.
 - [ ] README states the evaluation criteria so results are judged consistently.
 
-## Open questions
+## Acceptance additions for the z sweep
 
-- Should the movement test also sweep **height** (z) once ≥4 anchors exist? Out
-  of scope at 2 boards; note it for later.
+- [ ] Operator protocol includes the vertical sweep (steps 8–12).
+- [ ] JSON reports vertical transitions against `expected_slant_delta_cm`.
+- [ ] Antenna orientation recorded, since it is the main confounder.
+- [ ] A run with no vertical response is reported as such, not smoothed away.

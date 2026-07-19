@@ -21,18 +21,20 @@ Two things:
 **This phase writes infrastructure + reference tests. It does not test features
 that do not exist yet.**
 
-## Decisions — all settled, nothing to wait on
+## Ground rules for this phase
 
-- **Runtime: Docker Desktop.** Not currently installed; installing it is part of
-  this phase. WSL2 + Ubuntu is already present and is its backend.
-- **Container scope: build + host unit tests only.** It does **not** touch the
+- **Container scope: build + host unit tests only.** It does not touch the
   boards. No USB passthrough, no `usbipd-win`, no `--privileged`.
-- **Flashing, E2E and manual tests run on Windows** in a project-local **venv**.
-  The host already has the same ESP-IDF v5.5.2.
+- **Flashing, E2E and manual tests run on Windows** in a project-local **venv**,
+  against the ESP-IDF v5.5.2 already installed there.
 - **Both Ceedling and the ESP-IDF Linux target**, with a strict division —
   Ceedling owns `domain/`, the Linux target owns `services/`, and **no module is
   tested in both** (`docs/TESTING.md` §2).
 - **gcovr** for coverage, in the container.
+
+Docker Desktop 4.82.0 and the image are already installed and validated
+(`docs/CONTAINER.md` §8); this phase productionises that setup into
+`docker/` + `tools/dev.ps1`.
 
 ## Context an agent needs
 
@@ -44,9 +46,9 @@ that do not exist yet.**
 - `domain/` is designed to have **zero ESP-IDF dependencies**. If a host test
   needs a hardware header, the layering has been violated — **report it, do not
   work around it**.
-- Telemetry format is specified in `docs/PROTOCOL.md` — `$FTMRNG` / `$FTMFIX`
-  with `fix_quality` and `num_anchors`. Phase 0 does not implement it, but the
-  E2E harness should be able to parse it.
+- Telemetry is a **UBX-style binary protocol** (`docs/PROTOCOL.md`), implemented
+  in Phase 4. Phase 0 does not implement it, but the E2E harness must not assume
+  line-oriented text output.
 - Two boards are permanently attached and **physically fixed 1.00 m apart**
   (`docs/HARDWARE_FINDINGS.md` §10) — the standing fixture for autonomous
   distance assertions.
@@ -173,14 +175,15 @@ because they are the template every later phase copies:
 - [ ] Work done on a `phase-0/...` branch; `main` untouched
       (`docs/WORKFLOW.md` §1).
 
-## Open questions
+## Decisions in force
 
-- Coverage thresholds in `docs/TESTING.md` §2 are **proposed, not agreed**
-  (`domain/core` ≥90 % line / ≥85 % branch). Report actual numbers first; ask
-  the reviewer before turning them into a hard gate.
-- Xvfb in the container for the Phase 2 tkinter UI? Recommend **no** — enforce
-  the tkinter-free `model.py` split instead, so the logic tests headlessly and
-  the widgets are exercised by the operator on Windows.
+- **Coverage is reported, not gated.** Emit the gcovr numbers; do not fail the
+  build on the `docs/TESTING.md` §2 thresholds. Those become a gate only once
+  real modules exist to measure — a threshold set before there is anything to
+  measure only teaches people to game it.
+- **No Xvfb in the container.** The Phase 2 tkinter UI runs on Windows for the
+  operator; its logic lives in a tkinter-free `model.py` and is tested
+  headlessly. Enforce that split rather than adding a display server.
 
 ## Handoff
 

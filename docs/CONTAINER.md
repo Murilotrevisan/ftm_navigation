@@ -1,14 +1,14 @@
 # Container — Build & Unit Test
 
-> **Decided.** No open questions. The container is Phase 0's first deliverable.
+**Scope: the container builds firmware and runs host unit tests. It does not
+touch the boards.**
 
-**Scope is deliberately narrow: the container builds firmware and runs host unit
-tests.** It does **not** touch the boards.
+Flashing and E2E run on Windows, which has the same ESP-IDF v5.5.2. Keeping
+hardware access on the host avoids USB passthrough into WSL entirely
+(`usbipd-win`, device forwarding, re-attaching after every replug) — complexity
+that would buy reproducibility for a step that is already reproducible.
 
-Flashing and E2E run on Windows, which already has the same ESP-IDF v5.5.2.
-This avoids USB passthrough (`usbipd-win`, WSL device forwarding, re-attaching
-after every replug) entirely — complexity that bought reproducibility we do not
-need for a step that is already reproducible.
+Toolchain versions and validation results are in §8.
 
 | Job | Where | Why |
 | --- | --- | --- |
@@ -24,20 +24,14 @@ need for a step that is already reproducible.
 
 ## 1. Runtime
 
-**Docker Desktop.** Confirmed acceptable — personal local project, no login, no
-licence concern.
-
-`docker` is not currently installed; WSL2 + Ubuntu already is, which Docker
-Desktop uses as its backend.
+**Docker Desktop 4.82.0**, engine 29.6.1, WSL2 backend (Ubuntu 26.04).
+Installed and running on this machine.
 
 ## 2. Image
 
 ```dockerfile
 FROM espressif/idf:v5.5.2
 ```
-
-The repo already has a `.devcontainer/` using `espressif/idf`; that is the
-starting point, **pinned to `v5.5.2`**.
 
 **Do not float the tag.** `latest` would silently change the IDF version out
 from under the measurements recorded in `docs/HARDWARE_FINDINGS.md`.
@@ -149,6 +143,9 @@ Boards are physically fixed **1.00 m apart** (`HARDWARE_FINDINGS.md` §10).
 
 | Symptom | Cause |
 | --- | --- |
+| **All commands after the first silently do nothing** | **`bash -lc` breaks in this image — use `bash -c`.** The login shell re-sources the IDF export and swallows the rest of the command. Cost an hour to find; do not regress it. |
+| **Linux-target test binary never exits** | ESP-IDF's linux target keeps its scheduler running after `UNITY_END()`. Call `exit(failures)` explicitly, or the test hangs forever instead of failing. |
+| **gcovr reports 0 lines covered** | `gcovr -r .` does not find Ceedling's gcov data. Point it at `build/gcov/out` (or use Ceedling's own gcov report plugin). A 0 % report looks like a pass — verify it shows real numbers. |
 | Build fails with Windows paths in errors | Host `build/` reused in container — use `build_container/` |
 | Files created as root on the host | Container UID not mapped |
 | Shell script "not found" despite valid path | CRLF line endings — `.gitattributes` forces LF; verify it applied |
@@ -156,3 +153,41 @@ Boards are physically fixed **1.00 m apart** (`HARDWARE_FINDINGS.md` §10).
 | `pip install` hits the system Python | venv not activated (§4) |
 | Serial writes time out, boot logs still appear | Firmware missing `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y` (`HARDWARE_FINDINGS.md` §1) |
 | Responder loses AP state between test steps | Opening a serial port resets the board — hold both ports open for the whole test |
+
+## 8. Validated toolchain
+
+Measured on this machine, not assumed.
+
+### Toolchains inside the container
+
+| Tool | Version | Status |
+| --- | --- | --- |
+| ESP-IDF | v5.5.2 | OK |
+| Ruby | 3.2.3 | OK |
+| Ceedling | 1.1.0 | OK |
+| gcovr | 7.0 | OK (needs wiring, see below) |
+| gcc (host) | 13.3.0 | OK |
+| CMock / Unity | bundled in IDF | OK |
+
+### Exercised end to end
+
+| Check | Result |
+| --- | --- |
+| Firmware build (esp32c3) in container | **PASS** — `0xca6b0` bytes, 21 % free |
+| Ceedling `test:all` | **PASS** — 2/2, incl. an out-of-range-enum worst case, 140 ms |
+| ESP-IDF linux target build | **PASS** |
+| Linux target test binary runs natively | **PASS** — 3/3 |
+| gcovr report generation | **PARTIAL** — runs, but reported 0 lines; needs correct object directory |
+
+### Host venv (Windows)
+
+| Item | Result |
+| --- | --- |
+| `.venv` from IDF Python 3.11.2 | Created |
+| pytest | 8.4.2 |
+| pytest-embedded (+ idf, serial-esp) | 1.18.2, **multi-DUT `--count` confirmed** |
+| pyserial / numpy / matplotlib / construct | 3.5 / 2.4.6 / 3.11.1 / 2.10.70 |
+| esptool | 4.12.0 |
+| All imports (incl. headless matplotlib) | **PASS** |
+
+gcovr wiring is the one item still to finish, in Phase 0.

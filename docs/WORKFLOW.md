@@ -87,12 +87,13 @@ run the entire suite and discover what it broke.
 
 ```
 tests/
-├── host/        L1 — ESP-IDF linux target + Unity/CMock (no hardware)
-├── target/      L2 — on-target Unity test apps
-├── e2e/         L3 — pytest-embedded, both boards, autonomous
-├── tools/       L4 — pytest for host Python tools
-├── sim/         Simulation tests (3D logic, N>=4 anchors)
-└── manual/      L5 — operator-driven, @pytest.mark.manual
+├── host_ceedling/  L1a — Ceedling (Unity/CMock) -> domain/, no hardware
+├── host_idf/       L1b — ESP-IDF linux target -> services/, no hardware
+├── target/         L2  — on-target Unity test apps
+├── e2e/            L3  — pytest-embedded, both boards, autonomous
+├── tools/          L4  — pytest for host Python tools
+├── sim/            Lsim — simulation (3D logic, N>=4 anchors)
+└── manual/         L5  — operator-driven, @pytest.mark.manual
 ```
 
 Rules:
@@ -113,7 +114,61 @@ Rules:
 - Never commit `build/`, `sdkconfig`, or generated headers except the
   calibration table, which **is** committed for reproducibility.
 
-## 6. What to do when blocked
+### Co-author trailer
+
+Every commit ends with a trailer naming the model that produced it:
+
+```
+Co-Authored-By: <Model Name> <noreply@anthropic.com>
+```
+
+Use the actual model, e.g. `Claude Opus 4.8`. This makes it possible to
+attribute behaviour to a specific model when reviewing history later.
+
+## 6. The work report
+
+**Every phase or feature branch ends with a written report**, committed as
+`docs/reports/<branch-name>.md`. The git history records what changed; the
+report records *what happened*, which the diff cannot show.
+
+Required sections:
+
+```markdown
+# Report — <branch>
+
+## What was built
+Plain description of the delivered functionality.
+
+## Deviations from the phase document
+Anything done differently from the phase doc, and why.
+"None" is a valid answer, but say it explicitly.
+
+## Scope changes
+Anything added, dropped, or deferred relative to the original scope.
+Include what was NOT done and why.
+
+## Test results
+Actual output. Pass/fail counts per level, duration, skips with reasons.
+
+## New findings
+Anything learned about the hardware or toolchain. If HARDWARE_FINDINGS.md
+was updated, say what changed.
+
+## Open items
+Anything left unresolved, with enough context for the next agent.
+```
+
+Rules:
+
+- **Deviations and scope changes are the point of the report.** A report that
+  only says "built what was asked, all tests pass" is either wrong or not
+  looking hard enough.
+- Report failures and skipped work plainly. Do not describe unverified work as
+  verified.
+- Paste real test output, not a claim about it (§2).
+- The report is written **before** requesting review, not after approval.
+
+## 7. What to do when blocked
 
 Stop and ask. Specifically stop — do not:
 
@@ -122,9 +177,9 @@ Stop and ask. Specifically stop — do not:
 - Work around a violated architectural constraint instead of reporting it.
 - Fabricate or predict test results you have not seen.
 
-Record the question in the phase doc's **Open questions** section and report it.
+Record the question in your work report (§6).
 
-## 7. Handoff checklist
+## 8. Handoff checklist
 
 Before declaring a phase complete:
 
@@ -136,4 +191,6 @@ Before declaring a phase complete:
       additions, or the changes are explained and justified).
 - [ ] Phase doc status table updated.
 - [ ] `docs/HARDWARE_FINDINGS.md` updated if new measurements were taken.
-- [ ] Open questions recorded.
+- [ ] Report written to `docs/reports/<branch-name>.md` (§6).
+- [ ] Every commit carries the `Co-Authored-By` model trailer (§5).
+- [ ] Open items recorded in the report.

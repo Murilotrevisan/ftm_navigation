@@ -130,10 +130,18 @@ Lighter than product code, but not absent:
   flag. Use `--offset=-200`.
 - Readings of `0.00 m` usually mean the boards are **too close**, not broken.
 
-## Open questions
+## Board fingerprinting
 
-- ~~Should the console example be kept?~~ **Resolved: yes**, kept under `tools/`.
-- Should `validate_board.py` record a baseline fingerprint per board (mean raw
-  RTT at the fixed 1.00 m reference) for later comparison? The physical jig now
-  exists (findings §10), so this is feasible — useful for detecting a degrading
-  board over time. Recommend yes; confirm with the reviewer.
+`validate_board.py` records a **baseline fingerprint per board**: mean and σ of
+`rtt_raw_ns` over ≥ 200 samples at the fixed 1.00 m reference
+(`HARDWARE_FINDINGS.md` §10), stored as
+`tools/bench/fingerprints/<mac>.json` and committed.
+
+On later runs it compares against the stored fingerprint and warns on
+significant divergence. This is the only way to distinguish "this board has
+degraded" from "the environment changed today" — without a stored baseline,
+a drifting board is indistinguishable from the drift already documented in
+findings §8.
+
+The fixed 1.00 m jig is what makes this possible; it would not be meaningful
+without a repeatable reference distance.

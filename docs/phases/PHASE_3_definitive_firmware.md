@@ -136,40 +136,57 @@ test should assert heap is unchanged across many failed sessions.
 
 ---
 
-## Sub-phase 3d — `services/` + role strategies
+## Sub-phase 3d — `services/`, tasks, role strategies
+
+Read `docs/RTOS.md` in full before starting this sub-phase.
 
 **Deliverables**
 
 ```
-components/services/
-├── middleware/
-│   ├── include/
-│   │   ├── ftm_scheduler.h      measurement loop, anchor round-robin
-│   │   ├── ftm_calib_store.h    calibration lookup (ARCHITECTURE §6)
-│   │   └── ftm_role.h           ftm_role_get()
-│   └── src/
-│       ├── ftm_role.c
-│       ├── ftm_role_initiator.c   compiled iff CONFIG_FTM_ROLE_INITIATOR
-│       └── ftm_role_responder.c   compiled iff CONFIG_FTM_ROLE_RESPONDER
-└── protocols/
-    ├── include/ftm_csv.h
-    └── src/
+components/services/middleware/
+├── include/
+│   ├── ftm_scheduler.h      measurement loop, anchor round-robin
+│   ├── ftm_calib_store.h    calibration lookup (ARCHITECTURE §8)
+│   ├── ftm_telemetry.h      tx task, queue, drop counter
+│   ├── ftm_serializer.h     serialiser interface (ARCHITECTURE §4)
+│   └── ftm_role.h           ftm_role_get()
+└── src/
+    ├── ftm_role.c
+    ├── ftm_role_initiator.c   compiled iff CONFIG_FTM_ROLE_INITIATOR
+    ├── ftm_role_responder.c   compiled iff CONFIG_FTM_ROLE_RESPONDER
+    ├── ftm_scheduler.c        task (A) "ftm_meas"
+    └── ftm_telemetry.c        task (B) "ftm_tx"
 main/
-├── app_main.c        role-agnostic; see ARCHITECTURE §3
-└── Kconfig.projbuild role choice, SSID, channel, timings
+├── app_main.c        role-agnostic; see ARCHITECTURE §5
+└── Kconfig.projbuild role choice, serialiser choice, SSID, channel, timings
 ```
 
-`app_main.c` must contain **no role logic** — get the strategy, drive the
-lifecycle, nothing else.
+The serialiser **interface** is defined here; its implementations arrive in
+Phase 4. Until then a null serialiser that encodes nothing is sufficient to
+build and test the task plumbing.
+
+**Two tasks, per `docs/RTOS.md`:**
+
+- `ftm_meas` (priority 5) — round-robins anchors, builds snapshots, enqueues
+  **by value** with timeout 0.
+- `ftm_tx` (priority 4) — drains the queue, serialises, writes to the host.
+
+The invariant that matters: **the measurement task must never block on
+transmission.** USB-Serial-JTAG writes block when nothing on the host is reading
+(`HARDWARE_FINDINGS.md` §1), and a single-task design would make measurement
+cadence depend on whether an operator happens to have a terminal open.
+
+`app_main.c` contains **no role logic** — get the strategy, drive the lifecycle,
+nothing else.
 
 Services depend on **driver interfaces**, so CMock can substitute a mock
-`wifi_ftm.h` and the scheduler becomes host-testable. This is the payoff for the
-layering; if the scheduler cannot be host-tested, the dependency direction is
-wrong.
+`wifi_ftm.h` and both the scheduler and the queue become host-testable. If the
+scheduler cannot be host-tested, the dependency direction is wrong.
 
-**Tests:** `docs/TESTING.md` §4.5, §4.6, §4.7, plus strategy lifecycle tests
-with an injected fake strategy — including failure injected at `init`, `start`,
-and `run`.
+**Tests:** `docs/TESTING.md` §4.5, §4.6, §4.9, §4.10, plus strategy lifecycle
+tests with an injected fake strategy — including failure injected at `init`,
+`start` and `run`. Queue overflow must be tested deterministically via a
+substituted in-memory queue, not by timing.
 
 ---
 
@@ -218,10 +235,31 @@ reading (findings §8).
 - [ ] Both boards run the definitive firmware; E2E suite green.
 - [ ] Calibration table generated from a real Phase 2 CSV.
 
-## Open questions
+## Decisions in force
 
-- Should the initiator also expose a console for field debugging, or stay
-  headless? Headless is simpler and the bench firmware (Phase 1) covers manual
-  probing. Recommend headless; flag if the reviewer disagrees.
-- Filter choice (median window size, EMA alpha) should be **Kconfig-tunable**
-  and its default justified by measured data, not guessed.
+- **The initiator is headless.** No console in the definitive firmware; the
+  Phase 1 bench firmware covers manual probing.
+- **Filter parameters are Kconfig-tunable, and their defaults are chosen by
+  measured sweep — not guessed.** See below.
+
+## Filter parameter sweep (part of sub-phase 3b)
+
+Median window size and EMA alpha must be selected from data, because the
+quantities they trade off are both real and both measured: per-sample spread of
+0.75–1.65 m at a fixed 1.2 m (`HARDWARE_FINDINGS.md` §7) against drift of the
+order of 1 m over tens of seconds (§8). A window long enough to suppress the
+spread is long enough to lag genuine motion.
+
+Procedure:
+
+1. Capture ≥ 20 minutes of continuous samples at the fixed 1.00 m reference.
+2. Sweep median window ∈ {1, 3, 5, 9, 15, 31} and EMA alpha ∈ {0.1 … 0.9}
+   offline, over that one recording — so every setting sees identical input.
+3. For each setting, report residual σ against the 1.00 m truth **and** the
+   settling time on a synthetic step.
+4. Choose defaults from the resulting curve and **record the sweep table in the
+   phase report** (`docs/WORKFLOW.md` §6).
+
+The chosen defaults must be justified by that table. A default with no sweep
+behind it is not acceptable, because the trade-off it silently makes is exactly
+the one that decides whether the system can distinguish motion from drift.

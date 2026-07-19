@@ -1,7 +1,7 @@
 # Testing Strategy
 
-> **STATUS: SETTLED.** The framework question is closed — see §2. Everything in
-> this document runs inside the container described in `docs/CONTAINER.md`.
+Host unit tests and builds run in the container; anything touching the boards
+runs on Windows in the project venv. See `docs/CONTAINER.md`.
 
 ---
 
@@ -24,10 +24,9 @@ The layering in `docs/ARCHITECTURE.md` is what makes L1 and Lsim possible:
 `domain/` has zero ESP-IDF dependencies, so the bulk of the logic — including
 all the 3D positioning maths — is testable with no board attached.
 
-## 2. Framework decision — SETTLED
+## 2. Frameworks
 
-**Both Ceedling and ESP-IDF's Linux target, together — not one substituting the
-other.** They have distinct jobs.
+**Ceedling and ESP-IDF's Linux target are both used**, with distinct jobs.
 
 ### L1a — Ceedling (Unity + CMock) → `domain/`
 
@@ -79,7 +78,7 @@ scope, not redundant in coverage.
 `gcovr` runs in the container over the L1a Ceedling suite (and L1b where
 practical), emitting HTML + XML to `build_container/coverage/`.
 
-**Proposed thresholds** (adjustable — flagged for review, not blocking):
+Target thresholds:
 
 | Target | Line | Branch |
 | --- | --- | --- |
@@ -90,17 +89,20 @@ practical), emitting HTML + XML to `build_container/coverage/`.
 `domain/core` is held highest because it is pure, fully reachable, and carries
 the maths that a wrong answer silently corrupts.
 
+These are reported but **not enforced as a build gate** until Phase 0 has
+measured real numbers against real modules; a threshold set before there is
+anything to measure only teaches people to game it.
+
 Coverage is a **floor, not a goal**. High coverage with only happy-path
 assertions still fails §3.
 
-### Rejected, with reasons
+### Frameworks not used
 
-| Option | Why not |
+| Option | Reason |
 | --- | --- |
-| **gmock / gtest** | C++ frameworks; the firmware is C. CMock generates C mocks from the real headers with far less ceremony. |
-| **Hand-written fakes instead of CMock** | Drift. A fake not regenerated from the header silently diverges when the interface changes, and the test keeps passing. |
-| **Everything on-target** | Too slow per-edit; kills the feedback loop that makes worst-case testing practical. |
-| **Ceedling *or* Linux target** | Rejected in favour of both, with the strict division rule above. |
+| gmock / gtest | C++ frameworks; the firmware is C. CMock generates C mocks from the real headers with far less ceremony. |
+| Hand-written fakes instead of CMock | Drift. A fake not regenerated from the header silently diverges when the interface changes, and the test keeps passing. |
+| Everything on-target | Too slow per-edit; kills the feedback loop that makes worst-case testing practical. |
 
 ## 3. Coverage requirement
 
@@ -186,25 +188,82 @@ not hypotheticals. Agents must cover the ones relevant to their module.
 | Malformed CSV (missing column, bad number) | Codegen fails; must not emit a half-valid header |
 | Offset outside `int16_t` range | Rejected — the hardware API takes `int16_t` cm |
 
-### 4.7 Telemetry protocol (`services/protocols/ftm_csv`)
+### 4.7 Binary telemetry protocol (`services/protocols/`)
 
-Spec: `docs/PROTOCOL.md`. Encoder tests live at L1b, decoder tests at L4.
+Spec: `docs/PROTOCOL.md`. Encoder tests at L1b, decoder tests at L4. Full case
+list in `docs/phases/PHASE_4_protocol.md`; the critical ones:
 
 | Case | Required behaviour |
 | --- | --- |
-| Output buffer too small | Truncation reported, never overflowed |
-| Failed sample (no measurement) | Emits `$FTMRNG` with non-zero status and empty measurement fields — dropouts visible, not hidden |
-| Field containing a separator | Escaped or rejected |
-| `fix_quality = 0/1` | Position fields **empty**, never `0,0,0` — zero is a valid coordinate |
-| `fix_quality >= 2` | Position fields populated and `residual_cm` present |
-| Checksum | Correct XOR over `$`..`*` exclusive; decoder **rejects and counts** a bad checksum rather than silently dropping |
-| Truncated sentence mid-field | Rejected, no partial parse |
-| Unknown trailing fields | **Ignored, not an error** — append-only evolution (PROTOCOL §1 rule 5) |
-| `num_anchors` disagrees with `$FTMRNG` count in the cycle | Detected and reported by the decoder |
-| Negative `dist_cm` | Parsed as signed; must not wrap (`HARDWARE_FINDINGS.md` §4) |
-| Stale position after quality drops below 2 | Decoder must clear it, not retain |
+| Struct sizes | `_Static_assert` 20 / 32 / 28 / 28 bytes — a silent padding change corrupts every recorded log |
+| `msg_seq` gap in a recorded stream | Reported as loss; **must not** stall or gate the consumer |
+| Golden bytes | Known struct encodes to hand-verified bytes; decoder round-trips exactly |
+| Checksum | UBX Fletcher-8 over class/ID/length/payload; decoder **rejects and counts**, never silently drops |
+| `NAV-POSITION` with `fix_quality < 2` | **Encoder refuses.** Emitting a position that should not exist must be structurally impossible |
+| Log with zero `NAV-POSITION` | Normal, not an error — absence is how "no position" is expressed |
+| Stale position after quality drops below 2 | Consumer clears it; never retained |
+| Truncated frame at any offset | No crash, no partial parse |
+| Garbage / `ESP_LOG` text between frames | Resynchronises on `0xF7 0x4D` without losing following frames |
+| Sync bytes inside a payload | Not a false frame start — length + checksum disambiguate |
+| Unknown class/ID | Skipped via `LENGTH`, stream continues |
+| Payload longer than this version knows | Prefix parsed, remainder ignored (append-only) |
+| `LENGTH` absurdly large | Rejected without allocating |
+| Negative `dist_cm` | Signed round-trip; must not wrap (`HARDWARE_FINDINGS.md` §4) |
+| `num_ranges_sent` vs. actual `NAV-RANGE` count | Mismatch detected and reported |
+| `.ftmlog` wrapper stripped | Yields **byte-identical** frames — live and log decoders are one codebase |
+| `NAV-RANGE` `station_id` with no `CFG-ANCHOR` | Explicit "unknown anchor"; **never** defaulted to station 0 |
+| `CFG-ANCHOR` position-unknown flag | Position treated as unknown, never as `0,0,0` |
+| Non-monotonic `host_unix_us` | Tolerated and flagged, not fatal |
 
-### 4.8 Range-only fallback (`services/middleware`, see PHASE_4)
+### 4.8 Serialiser contract suite (`services/protocols/*`)
+
+**Every serialiser implementation must pass this same suite.** It is what makes
+the module genuinely swappable rather than nominally so — see
+`docs/ARCHITECTURE.md` §4. A new serialiser is not a valid implementation until
+it passes unmodified.
+
+The suite is written against `ftm_serializer_t`, never against a concrete
+format, and is parameterised over whichever implementations are compiled in.
+
+| Case | Required behaviour |
+| --- | --- |
+| Round-trip, every snapshot kind | Encode → decode reproduces the snapshot exactly |
+| `cap` exactly `max_encoded_size()` | Succeeds |
+| `cap` one byte short | Fails cleanly, returns 0, **writes nothing past `cap`** |
+| `cap == 0` | Returns 0, no write |
+| `max_encoded_size()` bound | Holds for every snapshot kind at extreme field values — a too-small bound is a latent buffer overflow |
+| Position snapshot with `fix_quality < 2` | **Refused.** Emitting a position that should not exist must be structurally impossible in every implementation |
+| Unknown `snapshot.kind` | Refused, returns 0; never emits a partial message |
+| Extreme values (`INT32_MIN/MAX`, all-`0xFF` BSSID, `NaN`/`Inf` rtt) | Encoded or refused deterministically; never undefined behaviour |
+| No allocation | Verified — the encoder must be callable from a task with a fixed stack |
+| Determinism | Same snapshot encodes to identical bytes across calls |
+
+### 4.9 Tasks and queue (`services/middleware`, see `docs/RTOS.md`)
+
+Tested at L1b with a substituted in-memory queue, so overflow is deterministic
+rather than timing-dependent.
+
+| Case | Required behaviour |
+| --- | --- |
+| Queue full | Producer **does not block**; discards the **oldest**, enqueues the new one, increments the drop counter |
+| **Newest always survives** | After overflow, the most recent snapshot is present — this is the navigation-critical invariant (`RTOS.md` §5) |
+| Oldest is the one lost | After overflow, the discarded entry is the oldest, not the newest |
+| `msg_seq` monotonic and gap-free when nothing drops | No spurious gaps |
+| `msg_seq` gap exactly matches drops | N drops produce a gap of exactly N |
+| `msg_seq` assigned at enqueue, not at serialisation | Drops are visible as gaps — assigned later, they would be invisible, silently defeating the diagnostic |
+| `dropped_total` in `NAV-STATUS` | Matches the number actually dropped |
+| `msg_seq` / `dropped_total` wraparound at `UINT32_MAX` | Handled; gap arithmetic still correct |
+| Sustained overflow | Bounded memory; staleness bounded by `depth × period` (`RTOS.md` §5.3) |
+| Consumer blocked indefinitely (host not reading) | Measurement cadence **unaffected** — the reason for the split (`RTOS.md` §2) |
+| Empty queue | Consumer blocks without spinning and without tripping the watchdog |
+| Snapshot mutated after enqueue | Queued copy unchanged — proves by-value semantics |
+| Consumer dequeues during the producer's discard | No corruption, no lost newest (`RTOS.md` §5.2) |
+| FTM event arrives during a session | Handled once; no double-processing |
+| FTM session times out with no event | Surfaces as a timeout, not a watchdog reset |
+| Queue creation failure at init | Fatal and loud; never a half-started system |
+| Producer starts before consumer | No lost messages, no null-handle race |
+
+### 4.10 Range-only fallback (`services/middleware`)
 
 Fewer than 4 anchors means no 3D fix. The system falls back to reporting per-
 station linear distances (`docs/ARCHITECTURE.md` §4).

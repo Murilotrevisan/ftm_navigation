@@ -19,6 +19,10 @@
 # Build artifacts and directories
 **/build/
 build/
+# Container-side build dir, kept separate from the host's: a build/ produced by
+# Windows CMake carries Windows absolute paths and fails inside Linux.
+build_container/
+**/build_container/
 *.o
 *.a
 *.out
