@@ -14,10 +14,40 @@
 | Fact | Value |
 | --- | --- |
 | `SOC_WIFI_FTM_SUPPORT` on ESP32-C3 | `y` — both initiator and responder |
-| `CONFIG_ESP_WIFI_FTM_INITIATOR_SUPPORT` | `y` by default |
-| `CONFIG_ESP_WIFI_FTM_RESPONDER_SUPPORT` | `y` by default |
+| `CONFIG_ESP_WIFI_FTM_ENABLE` | **`n` by default — must be set explicitly** |
+| `CONFIG_ESP_WIFI_FTM_INITIATOR_SUPPORT` | `y` by default, **but depends on `ESP_WIFI_FTM_ENABLE`** |
+| `CONFIG_ESP_WIFI_FTM_RESPONDER_SUPPORT` | `y` by default, **but depends on `ESP_WIFI_FTM_ENABLE`** |
 | Board USB | Built-in USB-Serial-JTAG, VID `303A` / PID `1001` |
 | Console config required | `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y` |
+
+**FTM-disabled trap** (measured in Phase 0, correcting an earlier reading of
+this table). The initiator and responder options really are `default y`, which
+made them look like they need no configuration — but both `depends on
+ESP_WIFI_FTM_ENABLE`, and that option is `default n`
+(`components/esp_wifi/Kconfig:397` in ESP-IDF v5.5.2). A project that does not
+set it gets **no FTM at all**:
+
+```
+# CONFIG_ESP_WIFI_FTM_ENABLE is not set     <- generated sdkconfig, no defaults
+```
+
+The earlier measurements in this document were taken with the Espressif FTM
+example, whose own `sdkconfig.defaults` sets it — which is why the dependency
+never surfaced. Every firmware in this repo must carry:
+
+```
+CONFIG_ESP_WIFI_FTM_ENABLE=y
+CONFIG_ESP_WIFI_FTM_INITIATOR_SUPPORT=y
+CONFIG_ESP_WIFI_FTM_RESPONDER_SUPPORT=y
+```
+
+Caught by the on-target L2 test (`tests/target_smoke/`), which asserts the
+symbols are defined rather than assuming it:
+
+```
+./main/target_smoke_main.c:46:test_ftm_is_supported_by_this_soc:FAIL:
+    CONFIG_ESP_WIFI_FTM_INITIATOR_SUPPORT is disabled
+```
 
 **Console trap.** The example defaults to `CONFIG_ESP_CONSOLE_UART_DEFAULT`,
 putting the REPL on UART0 whose pins are not wired to USB. Symptom is
