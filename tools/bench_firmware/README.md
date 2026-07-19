@@ -1,3 +1,57 @@
+# FTM bench firmware
+
+This is Espressif's Wi-Fi FTM console example from ESP-IDF v5.5.2, preserved as
+a known-good hardware bring-up tool. The source retains Espressif's CC0/public
+domain notice. The only source change releases driver-owned FTM reports after
+failed and timed-out sessions; detailed per-frame reporting and the
+USB-Serial-JTAG console are enabled in `sdkconfig.defaults`.
+
+## Validate a new board from start to finish
+
+The project fixture uses COM3 (`14:63:93:8d:98:74`) as the responder and COM4
+(`14:63:93:8d:96:e4`) as the initiator, fixed 1.00 m apart. Port names can
+change, so confirm the USB devices have VID `303A`, PID `1001`, and the expected
+MAC serial numbers before flashing.
+
+1. Connect both boards and place them at the repeatable 1.00 m reference.
+2. Create/activate the project venv as documented in `docs/CONTAINER.md`; do not
+   install test packages into the system or ESP-IDF Python.
+3. From the repository root run:
+
+   ```powershell
+   .\.venv\Scripts\python.exe tools\bench\validate_board.py `
+       --first-port COM3 --second-port COM4 --sessions 8 `
+       --log-dir bench_logs
+   ```
+
+   The command reads both MACs, flashes this firmware to both boards, opens both
+   serial ports once, starts COM3 as the responder, and runs COM4 as the
+   initiator. Eight sessions normally provide at least 200 per-frame RTT samples
+   for the baseline fingerprints.
+
+4. A passing run prints `PASS: both boards validated in their assigned roles`
+   and creates or compares `tools/bench/fingerprints/<mac>.json`. Review every
+   warning; a fingerprint divergence is diagnostic and does not silently change
+   the stored baseline.
+
+The validator fails non-zero for missing sessions, a valid/received ratio below
+0.8, implausible RSSI, all-zero raw RTT, all-zero distances, serial errors, or a
+missing prompt. `boards too close?` identifies the zero-distance clamp. Because
+real slow drift is documented in `docs/HARDWARE_FINDINGS.md`, keep failed raw
+logs and rerun only as a separate attempt; do not weaken the checks.
+
+For a quick rebuild or manual flash on Windows, the environment wrapper avoids
+the Microsoft Store Python alias problem:
+
+```powershell
+.\tools\bench\idf.ps1 -C tools\bench_firmware build
+.\tools\bench\idf.ps1 -C tools\bench_firmware -p COM3 flash
+```
+
+See `tools/bench/README.md` for the single-console and two-board diagnostic
+commands. The normal product firmware does not live here; this directory remains
+an intentionally upstream-like hardware reference.
+
 | Supported Targets | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-S2 | ESP32-S3 |
 | ----------------- | -------- | -------- | -------- | -------- | --------- | -------- | -------- |
 

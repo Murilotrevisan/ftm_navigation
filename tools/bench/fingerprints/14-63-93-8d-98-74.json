@@ -1,0 +1,10 @@
+{
+  "mac": "14:63:93:8d:98:74",
+  "peer_mac": "14:63:93:8d:96:e4",
+  "role": "responder",
+  "reference_distance_m": 1.0,
+  "sample_count": 235,
+  "mean_rtt_raw_ns": 1.150272340425532,
+  "stdev_rtt_raw_ns": 2.9064326965424168,
+  "created_utc": "2026-07-19T21:17:34.301707+00:00"
+}
