@@ -1,163 +1,158 @@
-# Container — Build, Test and Flash
+# Container — Build & Unit Test
 
-> **Spec, not yet built.** The container is Phase 0's first deliverable. One
-> decision in §2 needs a human answer before it can be built.
+> **Decided.** No open questions. The container is Phase 0's first deliverable.
 
-The goal: **every build and every test runs inside a Linux container.** Nothing
-installs into the Windows host toolchain. Agents run one command and get a
-reproducible environment.
+**Scope is deliberately narrow: the container builds firmware and runs host unit
+tests.** It does **not** touch the boards.
+
+Flashing and E2E run on Windows, which already has the same ESP-IDF v5.5.2.
+This avoids USB passthrough (`usbipd-win`, WSL device forwarding, re-attaching
+after every replug) entirely — complexity that bought reproducibility we do not
+need for a step that is already reproducible.
+
+| Job | Where | Why |
+| --- | --- | --- |
+| Firmware build | **Container** | Reproducible toolchain, no host pollution |
+| L1 host unit tests (Ceedling) | **Container** | Ruby lives in the image, not on the PC |
+| L1b host unit tests (ESP-IDF linux target) | **Container** | Same IDF build system as firmware |
+| Coverage (gcovr) | **Container** | Toolchain-coupled |
+| Flashing | **Windows host** | Host already has ESP-IDF; no USB forwarding needed |
+| L3 E2E, L5 manual | **Windows host, in a venv** | Needs the boards; venv keeps it isolated |
+| L4 tool tests | **Windows host, in a venv** | Same venv as E2E |
 
 ---
 
-## 1. Base image
+## 1. Runtime
 
-Build on Espressif's official image, pinned to the version already validated on
-this hardware:
+**Docker Desktop.** Confirmed acceptable — personal local project, no login, no
+licence concern.
+
+`docker` is not currently installed; WSL2 + Ubuntu already is, which Docker
+Desktop uses as its backend.
+
+## 2. Image
 
 ```dockerfile
 FROM espressif/idf:v5.5.2
 ```
 
-The repo already contains a `.devcontainer/` using `espressif/idf` — that is the
-starting point, upgraded to a pinned tag and extended with the test toolchain.
+The repo already has a `.devcontainer/` using `espressif/idf`; that is the
+starting point, **pinned to `v5.5.2`**.
 
 **Do not float the tag.** `latest` would silently change the IDF version out
-from under measurements recorded in `docs/HARDWARE_FINDINGS.md`.
+from under the measurements recorded in `docs/HARDWARE_FINDINGS.md`.
 
-### Installed inside the container
+### Installed in the image
 
 | Tool | Purpose |
 | --- | --- |
-| ESP-IDF v5.5.2 + toolchains | Build (from base image) |
-| ESP-IDF **linux target** support | L1 host unit tests — see `docs/TESTING.md` §2 |
-| Unity + CMock | Bundled in ESP-IDF at `components/unity`, `components/cmock` |
-| Python 3 + pytest | L3/L4/L5 tests |
-| `pytest-embedded`, `pytest-embedded-idf`, `pytest-embedded-serial-esp` | Multi-DUT E2E harness |
-| `esptool.py` | Flashing (from base image) |
-| matplotlib, numpy | Calibration/movement analysis |
-| tkinter (`python3-tk`) | Phase 2 calibrator UI |
-| gcovr | Host coverage (optional) |
+| ESP-IDF v5.5.2 + toolchains | Firmware build (base image) |
+| ESP-IDF **linux target** support | L1b host tests — verified present in v5.5.2 |
+| Unity + CMock | Bundled at `components/unity`, `components/cmock` |
+| **Ruby + Ceedling** | L1 host tests. Ruby is in the image, **never on the PC** |
+| **gcovr** | Coverage reporting |
+| gcc/g++, make, cmake, ninja | Host compilation for Ceedling |
 
-**No Ruby, no Ceedling** — superseded, see `docs/TESTING.md` §2.
+No pytest, no pyserial, no matplotlib — those belong to the host venv (§4).
 
-## 2. DECISION REQUIRED — USB access for flashing and E2E
-
-A Linux container on Windows cannot see `COM3`/`COM4` by default. Docker Desktop
-runs containers in a WSL2 VM, and USB devices are not forwarded automatically.
-
-There is no way around this: **containerised flashing requires one extra tool on
-the Windows host.**
-
-### Option A — Container builds and unit-tests; Windows host flashes
-
-- **Host installs:** container runtime only.
-- Container produces `build/*.bin` into a mounted volume; a small PowerShell
-  script on the host flashes with the ESP-IDF Python already present.
-- **Limitation: E2E tests (L3/L5) run on the Windows host, not the container.**
-  That is the most important test level, and it would sit outside the isolation
-  you asked for. Agents would need a working Windows Python environment too —
-  two environments to keep healthy.
-
-### Option B — Container does everything, including flash and E2E *(recommended)*
-
-- **Host installs:** container runtime **plus `usbipd-win`** (a ~5 MB Microsoft
-  open-source tool).
-- `usbipd` forwards each board's USB interface into WSL2, where the container
-  sees them as `/dev/ttyACM0` and `/dev/ttyACM1`.
-- Single environment. Agents run one command for every level, L1 through L5.
-- **Cost:** `usbipd attach` must be re-run after a replug or reboot. Scriptable
-  (`tools/attach_boards.ps1`), and the E2E harness should detect a missing
-  device and print the exact fix-up command rather than hanging.
-
-**Recommendation: Option B.** The whole point of the container is that agents
-can run *all* tests autonomously and reproducibly; Option A leaves the E2E suite
-outside it and creates a second environment to maintain.
-
-### Also required either way: a container runtime
-
-`docker` is **not currently installed** on this machine. WSL2 with Ubuntu **is**
-already present and working.
-
-| Choice | Notes |
-| --- | --- |
-| **Docker Desktop** | Simplest, integrates with WSL2. Check licence terms — free for personal/small business, paid for large orgs. |
-| **Podman Desktop** | Rootless, no licence question, slightly rougher WSL2 USB story. |
-| **Docker Engine inside the existing WSL2 Ubuntu** | Nothing installed on Windows proper; runs entirely inside the WSL distro you already have. Most faithful to "no changes on my PC", slightly more setup. |
-
-> **Please answer: which container runtime, and Option A or B?** Everything else
-> in this document is decided and does not need review.
-
-## 3. Layout (Phase 0 deliverable)
+## 3. Layout
 
 ```
 docker/
-├── Dockerfile              # FROM espressif/idf:v5.5.2 + test toolchain
-├── docker-compose.yml      # volumes, device passthrough, user mapping
-├── entrypoint.sh           # sources export.sh, drops to command
-└── README.md               # -> points here
+├── Dockerfile              # FROM espressif/idf:v5.5.2 + ruby/ceedling/gcovr
+├── docker-compose.yml      # repo volume, ccache volume, UID mapping
+├── entrypoint.sh           # sources export.sh (LF line endings!)
+└── README.md
 tools/
-├── dev.ps1                 # Windows entry: dev.ps1 build|test|flash|shell
-├── dev.sh                  # same, from inside WSL/Linux
-└── attach_boards.ps1       # usbipd bind+attach for both boards (Option B)
+├── dev.ps1                 # Windows entry point
+└── dev.sh                  # same, from inside WSL/Linux
 ```
 
-### Key container requirements
+### Requirements
 
-- **Repo mounted, not copied**, so edits on Windows are visible immediately.
-- **Build output must not collide with host builds.** Use a container-specific
-  build directory (`build_container/`) — a `build/` produced by Windows CMake
-  has Windows absolute paths and will fail confusingly inside Linux.
-- **User mapping**: run as a non-root user matching the host UID so generated
-  files are not root-owned.
-- **ccache volume** persisted between runs; ESP-IDF builds are slow otherwise.
-- Device passthrough for `/dev/ttyACM0` and `/dev/ttyACM1` (Option B).
+- **Repo mounted, not copied**, so Windows-side edits are visible immediately.
+- **Container build directory must not collide with the host's.** Use
+  `build_container/`; a `build/` produced by Windows CMake contains Windows
+  absolute paths and fails inside Linux in a confusing way.
+- **UID mapping** so generated files are owned by the user, not root.
+- **ccache volume** persisted between runs — ESP-IDF builds are slow otherwise.
+- **No device mapping. No `--privileged`.** The container has no business
+  touching hardware.
 
-## 4. Intended usage (what the README must document)
+## 4. Host venv (E2E, manual, tool tests)
+
+Everything needing the boards runs on Windows inside a project-local venv, so
+nothing leaks into the system Python.
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements-test.txt
+```
+
+`requirements-test.txt` pins: `pytest`, `pytest-embedded`,
+`pytest-embedded-idf`, `pytest-embedded-serial-esp`, `pyserial`, `matplotlib`,
+`numpy`.
+
+`.venv/` is git-ignored. The venv is **required** — do not `pip install` into the
+system or IDF Python.
+
+Host-side ESP-IDF still needs its environment activated, and `export.ps1` fails
+from a plain shell because the Microsoft Store `python` alias shadows the IDF
+Python:
+
+```powershell
+$env:Path = "C:\Users\murilo\.espressif\tools\idf-python\3.11.2;" + $env:Path
+& "C:\Users\murilo\esp\v5.5.2\esp-idf\export.ps1"
+```
+
+## 5. Intended usage
 
 ```powershell
 # One-time
-.\tools\dev.ps1 setup            # build the image
+.\tools\dev.ps1 setup           # build the image
+.\tools\dev.ps1 venv            # create .venv and install test deps
 
-# Every session (Option B only)
-.\tools\attach_boards.ps1        # forward both boards into WSL2
+# Container: build + host unit tests
+.\tools\dev.ps1 build           # firmware build
+.\tools\dev.ps1 test-host       # Ceedling + ESP-IDF linux-target unit tests
+.\tools\dev.ps1 coverage        # gcovr report -> build_container/coverage/
+.\tools\dev.ps1 shell           # interactive shell in the container
 
-# Daily
-.\tools\dev.ps1 build            # build firmware in container
-.\tools\dev.ps1 test             # ALL autonomous tests (L1..L4)
-.\tools\dev.ps1 test-host        # L1 only, no hardware needed
-.\tools\dev.ps1 flash responder  # flash the COM3 board
-.\tools\dev.ps1 flash initiator  # flash the COM4 board
-.\tools\dev.ps1 e2e              # L3 end-to-end across both boards
-.\tools\dev.ps1 manual           # L5 operator-driven movement test
-.\tools\dev.ps1 shell            # interactive shell in the container
+# Windows host: hardware
+.\tools\dev.ps1 flash responder # flash the responder board
+.\tools\dev.ps1 flash initiator # flash the initiator board
+.\tools\dev.ps1 e2e             # L3 across both boards (venv)
+.\tools\dev.ps1 manual          # L5 operator-driven movement test (venv)
 ```
 
-Every command must work from a clean checkout with no host-side ESP-IDF.
+`dev.ps1` routes each subcommand to the right place. An agent should never need
+to know which side a given command runs on.
 
-## 5. Board identity — do not trust port numbers
+## 6. Board identity — do not trust port numbers
 
-Ports enumerate in whatever order Windows/WSL feels like. `/dev/ttyACM0` is not
-reliably the same physical board across reboots.
-
-**Bind roles to MAC address, not port.** Known:
+Ports re-enumerate unpredictably. **Bind roles to MAC address, not port.**
 
 | Board | MAC | Intended role |
 | --- | --- | --- |
 | A | *(record during Phase 0)* | Responder / anchor |
 | B | `14:63:93:8d:96:e4` | Initiator |
 
-`dev.ps1 flash <role>` must resolve the role to a MAC, probe the attached
-devices, and flash the right one — failing loudly if the expected board is
-absent. Flashing the wrong role onto the wrong board silently produces a system
-that looks broken in a very confusing way.
+`dev.ps1 flash <role>` must resolve the role to a MAC, probe attached devices,
+and flash the right one — **failing loudly if the expected board is absent**.
+Flashing the wrong role onto the wrong board produces a system that looks broken
+in a very confusing way.
 
-## 6. Traps
+Boards are physically fixed **1.00 m apart** (`HARDWARE_FINDINGS.md` §10).
+
+## 7. Traps
 
 | Symptom | Cause |
 | --- | --- |
+| Build fails with Windows paths in errors | Host `build/` reused in container — use `build_container/` |
+| Files created as root on the host | Container UID not mapped |
+| Shell script "not found" despite valid path | CRLF line endings — `.gitattributes` forces LF; verify it applied |
 | `export.sh` fails / tools missing | Entrypoint did not source `/opt/esp/idf/export.sh` |
-| Build fails with Windows paths in errors | Host `build/` reused inside container — use `build_container/` |
-| Files created as root on the host | Container UID not mapped to host user |
-| `/dev/ttyACM*` missing | `usbipd attach` not run this session (Option B) |
-| Serial writes time out, boot logs still appear | Firmware missing `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y` — see `HARDWARE_FINDINGS.md` §1 |
-| Shell script "not found" with a valid path | CRLF line endings — `.gitattributes` forces LF, verify it applied |
+| `pip install` hits the system Python | venv not activated (§4) |
+| Serial writes time out, boot logs still appear | Firmware missing `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y` (`HARDWARE_FINDINGS.md` §1) |
+| Responder loses AP state between test steps | Opening a serial port resets the board — hold both ports open for the whole test |

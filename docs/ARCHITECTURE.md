@@ -72,7 +72,7 @@ components/
 │   │   └── src/
 │   └── protocols/
 │       ├── include/
-│       │   └── ftm_csv.h          CSV sample serialisation
+│       │   └── ftm_csv.h          $FTMRNG / $FTMFIX encoder (docs/PROTOCOL.md)
 │       └── src/
 └── drivers/
     ├── CMakeLists.txt
@@ -170,8 +170,10 @@ honesty visible: it says what it measured rather than inventing a coordinate.
 
 Requirements:
 
-- The mode is **explicit in the output**. A consumer must never infer it from
-  whether a position field happens to be populated.
+- The mode is **explicit in the output**, transmitted as `fix_quality`
+  alongside `num_anchors` on every cycle — NMEA-style, see `docs/PROTOCOL.md`.
+  A consumer must never infer it from whether a position field happens to be
+  populated.
 - Degenerate geometry with ≥4 anchors also yields `RANGE_ONLY`, with the
   degeneracy as the stated reason — never a bogus 3D fix.
 - Dropping below 4 anchors must **not** leave a stale 3D fix visible.

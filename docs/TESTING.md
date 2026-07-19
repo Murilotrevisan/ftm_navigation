@@ -7,63 +7,100 @@
 
 ## 1. Test levels
 
-| Level | Scope | Framework | Runs on | Speed |
+| Level | Scope | Framework | Runs where | Speed |
 | --- | --- | --- | --- | --- |
-| **L1 Unit — host** | `domain/types`, `domain/core`, `services/*` | **ESP-IDF `linux` target** + Unity + CMock | Container, no hardware | seconds |
+| **L1a Unit — host** | `domain/types`, `domain/core` | **Ceedling** (Unity + CMock) | Container | < 1 s |
+| **L1b Unit — host** | `services/*`, domain+services integration | **ESP-IDF `linux` target** + Unity + CMock | Container | seconds |
 | **L2 Unit — target** | `drivers/peripherals/wifi` | Unity (ESP-IDF `test_apps`) | ESP32-C3 | ~30 s |
-| **L3 E2E — two boards** | Full firmware, both roles | pytest + pytest-embedded | Both boards | minutes |
-| **L4 Host tools** | calibrator UI, codegen scripts | pytest | Container | seconds |
-| **L5 Manual integration** | Physical movement → chart | pytest, human-in-loop | Both boards + operator | ~10 min |
-| **Lsim Simulation** | 3D trilateration, N≥4 anchors | ESP-IDF `linux` target | Container, no hardware | seconds |
+| **L3 E2E — two boards** | Full firmware, both roles | pytest + pytest-embedded | **Windows host, venv** | minutes |
+| **L4 Host tools** | calibrator, codegen, analysis | pytest | **Windows host, venv** | seconds |
+| **L5 Manual integration** | Physical movement → chart | pytest, human-in-loop | **Windows host, venv** | ~10 min |
+| **Lsim Simulation** | 3D trilateration, N≥4 anchors | Ceedling | Container | seconds |
 
-The layering in `docs/ARCHITECTURE.md` exists to make L1 and Lsim possible:
+Build and host unit tests run **in the container**; anything touching the boards
+runs **on Windows in a venv**. See `docs/CONTAINER.md`.
+
+The layering in `docs/ARCHITECTURE.md` is what makes L1 and Lsim possible:
 `domain/` has zero ESP-IDF dependencies, so the bulk of the logic — including
 all the 3D positioning maths — is testable with no board attached.
 
 ## 2. Framework decision — SETTLED
 
-**Use ESP-IDF's own host-test mechanism.** Verified present in the installed
-ESP-IDF v5.5.2:
+**Both Ceedling and ESP-IDF's Linux target, together — not one substituting the
+other.** They have distinct jobs.
 
-| Component | Path | Status |
+### L1a — Ceedling (Unity + CMock) → `domain/`
+
+- Sub-second feedback on pure logic, which is where the interesting worst-case
+  behaviour lives: clamp, sign inversion, overflow, degenerate geometry.
+- CMock **generates C mocks directly from headers**, so a mock cannot silently
+  drift from the real interface.
+- Ruby lives **in the container image only** — never installed on the PC.
+
+### L1b — ESP-IDF `linux` target → `services/`
+
+Verified present in the installed ESP-IDF v5.5.2:
+
+| Component | Path |
+| --- | --- |
+| Linux target toolchain | `tools/cmake/toolchain-linux.cmake` |
+| Linux target port | `components/esp_system/port/soc/linux` |
+| Unity | `components/unity` |
+| CMock | `components/cmock` (bundled) |
+
+`services/` sits inside the IDF component system and depends on driver
+interfaces. Testing it through IDF's own build exercises the **real component
+dependency graph and the real Kconfig wiring** — including the role-strategy
+source selection — which a standalone Ceedling project cannot see.
+
+### The division rule
+
+> **Each module has exactly ONE authoritative host test suite.** `domain/` is
+> Ceedling's. `services/` is the Linux target's. **Never test the same module in
+> both.**
+
+This matters: duplicated suites drift, then disagree, and the disagreement gets
+resolved by weakening whichever one is inconvenient — which
+`docs/WORKFLOW.md` §3 forbids anyway. The two systems are complementary in
+scope, not redundant in coverage.
+
+### L2 / L3 / L4 / L5
+
+- **L2** — Unity via ESP-IDF `test_apps`. Anything touching `esp_wifi` must run
+  on silicon; there is no meaningful way to fake the FTM hardware timing path.
+- **L3 / L5** — pytest + `pytest-embedded-idf` + `pytest-embedded-serial-esp`,
+  in the **Windows venv**. First-class multi-DUT support (`--count 2`) matches
+  the two-board topology; the boards become `dut[0]` / `dut[1]` rather than
+  hand-rolled pyserial plumbing.
+- **L4** — plain pytest, same venv.
+
+### Coverage — gcovr
+
+`gcovr` runs in the container over the L1a Ceedling suite (and L1b where
+practical), emitting HTML + XML to `build_container/coverage/`.
+
+**Proposed thresholds** (adjustable — flagged for review, not blocking):
+
+| Target | Line | Branch |
 | --- | --- | --- |
-| Linux target toolchain | `tools/cmake/toolchain-linux.cmake` | present |
-| Linux target port | `components/esp_system/port/soc/linux` | present |
-| Unity | `components/unity` | present |
-| **CMock** | `components/cmock` | present (bundled, `REQUIRES unity`) |
+| `domain/core` | ≥ 90 % | ≥ 85 % |
+| `domain/types` | ≥ 80 % | — |
+| `services/` | ≥ 80 % | ≥ 70 % |
 
-So L1 is `idf.py --preview set-target linux` + Unity + CMock — all first-party,
-already in the toolchain, and running natively in the Linux container.
+`domain/core` is held highest because it is pure, fully reachable, and carries
+the maths that a wrong answer silently corrupts.
 
-**Ceedling and Ruby are no longer needed and are not used.** The earlier
-proposal recommended Ceedling because ESP-IDF's Linux target needed WSL on
-Windows; the container removes that objection entirely, and using ESP-IDF's own
-framework is strictly better: one toolchain, one set of Unity assertions across
-L1/L2/Lsim, no second build system to keep in sync.
-
-CMock still provides what made Ceedling attractive — **C mocks generated
-directly from headers**, so a mock of `wifi_ftm.h` cannot silently drift from
-the real interface.
-
-**L2** — Unity via ESP-IDF `test_apps` (`components/<name>/test_apps/`), driven
-by pytest-embedded. Anything touching `esp_wifi` must run on silicon; there is
-no meaningful way to fake the FTM hardware timing path.
-
-**L3/L5** — pytest + `pytest-embedded-idf` + `pytest-embedded-serial-esp`.
-Espressif's own E2E harness, with first-class **multi-DUT** support
-(`--count 2`), which is exactly the two-board topology. The boards become
-`dut[0]` and `dut[1]` rather than hand-rolled pyserial plumbing.
-
-**L4** — plain pytest.
+Coverage is a **floor, not a goal**. High coverage with only happy-path
+assertions still fails §3.
 
 ### Rejected, with reasons
 
 | Option | Why not |
 | --- | --- |
 | **gmock / gtest** | C++ frameworks; the firmware is C. CMock generates C mocks from the real headers with far less ceremony. |
-| **Ceedling** | Superseded. Added Ruby and a second build system for capability ESP-IDF already ships. |
 | **Hand-written fakes instead of CMock** | Drift. A fake not regenerated from the header silently diverges when the interface changes, and the test keeps passing. |
 | **Everything on-target** | Too slow per-edit; kills the feedback loop that makes worst-case testing practical. |
+| **Ceedling *or* Linux target** | Rejected in favour of both, with the strict division rule above. |
 
 ## 3. Coverage requirement
 
@@ -149,13 +186,23 @@ not hypotheticals. Agents must cover the ones relevant to their module.
 | Malformed CSV (missing column, bad number) | Codegen fails; must not emit a half-valid header |
 | Offset outside `int16_t` range | Rejected — the hardware API takes `int16_t` cm |
 
-### 4.7 CSV protocol (`services/protocols/ftm_csv`)
+### 4.7 Telemetry protocol (`services/protocols/ftm_csv`)
+
+Spec: `docs/PROTOCOL.md`. Encoder tests live at L1b, decoder tests at L4.
 
 | Case | Required behaviour |
 | --- | --- |
 | Output buffer too small | Truncation reported, never overflowed |
-| Failed sample (no measurement) | Emits a row with non-zero status and empty fields — dropouts must be visible, not hidden |
+| Failed sample (no measurement) | Emits `$FTMRNG` with non-zero status and empty measurement fields — dropouts visible, not hidden |
 | Field containing a separator | Escaped or rejected |
+| `fix_quality = 0/1` | Position fields **empty**, never `0,0,0` — zero is a valid coordinate |
+| `fix_quality >= 2` | Position fields populated and `residual_cm` present |
+| Checksum | Correct XOR over `$`..`*` exclusive; decoder **rejects and counts** a bad checksum rather than silently dropping |
+| Truncated sentence mid-field | Rejected, no partial parse |
+| Unknown trailing fields | **Ignored, not an error** — append-only evolution (PROTOCOL §1 rule 5) |
+| `num_anchors` disagrees with `$FTMRNG` count in the cycle | Detected and reported by the decoder |
+| Negative `dist_cm` | Parsed as signed; must not wrap (`HARDWARE_FINDINGS.md` §4) |
+| Stale position after quality drops below 2 | Decoder must clear it, not retain |
 
 ### 4.8 Range-only fallback (`services/middleware`, see PHASE_4)
 

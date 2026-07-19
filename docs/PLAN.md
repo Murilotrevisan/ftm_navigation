@@ -51,7 +51,8 @@ ftm_measurement/
 │   ├── HARDWARE_FINDINGS.md      <- verified measurements, normative
 │   ├── ARCHITECTURE.md           <- layering, strategy pattern, contracts
 │   ├── TESTING.md                <- test framework + worst-case catalogue
-│   ├── CONTAINER.md              <- build/test/flash container (ONE OPEN DECISION)
+│   ├── CONTAINER.md              <- container (build + host unit tests only)
+│   ├── PROTOCOL.md               <- telemetry sentences, fix quality, anchor count
 │   ├── WORKFLOW.md               <- git rules, merge gate, regression rule
 │   └── phases/
 │       ├── PHASE_0_test_infra.md
@@ -111,8 +112,14 @@ These apply to every phase. An agent violating one should stop and flag it.
    See `docs/ARCHITECTURE.md` §4.
 6. **Never hardcode calibration constants in logic.** They come from the
    generated calibration table (Phase 2 output).
-7. **All builds and tests run in the container** (`docs/CONTAINER.md`). Nothing
-   is installed into the Windows host toolchain.
+7. **Builds and host unit tests run in the container**; flashing, E2E and manual
+   tests run on Windows **inside the project venv** (`docs/CONTAINER.md`).
+   Never `pip install` into the system or IDF Python. The container never
+   touches the boards.
+10. **Fix status travels with the data.** Every cycle reports `fix_quality` and
+    `num_anchors`, NMEA-style. Consumers switch behaviour on `fix_quality`,
+    never on whether a position field happens to be populated
+    (`docs/PROTOCOL.md`).
 8. **Branch per feature; `main` is never committed to directly.** Merges are
    human-approved after all tests pass and the results have been shown. See
    `docs/WORKFLOW.md`.
@@ -122,20 +129,21 @@ These apply to every phase. An agent violating one should stop and flag it.
 
 ## 6. Environment setup (every agent needs this)
 
-**Use the container** (`docs/CONTAINER.md`). All builds and tests run there.
-Once Phase 0 is done this is the whole story:
+Once Phase 0 is done, `tools/dev.ps1` routes every command to the right place —
+container or host — and an agent should not need to think about which:
 
 ```powershell
-.\tools\dev.ps1 test        # all autonomous tests
-.\tools\dev.ps1 build
-.\tools\dev.ps1 flash responder
+.\tools\dev.ps1 build            # container
+.\tools\dev.ps1 test-host        # container: Ceedling + IDF linux target
+.\tools\dev.ps1 coverage         # container: gcovr
+.\tools\dev.ps1 flash responder  # Windows host
+.\tools\dev.ps1 e2e              # Windows host, venv
 ```
 
-### Host ESP-IDF (legacy path, pre-container only)
+### Host ESP-IDF
 
-The Windows host also has ESP-IDF v5.5.2 at `C:\Users\murilo\esp\v5.5.2`. It was
-used for the initial evaluation and remains usable, but **new work should not
-depend on it**.
+The Windows host has ESP-IDF v5.5.2 at `C:\Users\murilo\esp\v5.5.2`, used for
+flashing and E2E.
 
 `export.ps1` fails from a plain PowerShell session because the Microsoft Store
 `python` alias shadows the IDF Python. Always prepend the IDF Python first:

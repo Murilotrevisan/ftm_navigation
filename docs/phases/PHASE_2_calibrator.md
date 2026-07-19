@@ -77,14 +77,24 @@ tools/calibrator/
 - **Always drain the report** via `esp_wifi_ftm_get_report()`, including on
   failure and timeout. The upstream example leaks here (§9).
 - `esp_log_level_set("*", ESP_LOG_WARN)` so logs do not interleave with data.
-- Emit one line per session, prefixed so a parser cannot be confused:
+- **Emit the telemetry protocol from `docs/PROTOCOL.md` — not an ad-hoc format.**
+  Both sentence types, from day one:
 
 ```
-FTM,<seq>,<uptime_ms>,<status>,<bssid>,<dist_cm>,<rtt_est_ns>,<rtt_raw_ns>,<rssi_dbm>,<valid>,<total>
+$FTMRNG,88,132004,0,1463938d9875,118,8.489,-52,30,30,0*15
+$FTMFIX,22,132004,1,1,,,,*4C
 ```
 
-- **Failed sessions still emit a row** with non-zero status and empty
+  At this stage every cycle is `fix_quality=1` (`RANGE_ONLY`), `num_anchors=1`,
+  position fields empty. That is correct, not a placeholder.
+
+  Emitting `$FTMFIX` now — even though it carries no position yet — is the
+  point: the host protocol is **stable from the start**, so the visualisation
+  can switch on `fix_quality` later without a firmware or parser change.
+
+- **Failed sessions still emit a `$FTMRNG` row** with non-zero status and empty
   measurement fields. Dropouts must be visible in the data, not silently absent.
+- Checksums per `docs/PROTOCOL.md` §4.
 - Accept a runtime command to set the responder offset (so the UI can sweep
   without reflashing).
 
@@ -135,8 +145,11 @@ L4 pytest, covering `docs/TESTING.md` §4.1, §4.2, §4.6:
 | All-zero readings | Flagged as "too close", not exported as offset 0 |
 | Insufficient samples | Export refused below threshold |
 | Offset out of `int16_t` | Rejected |
-| Malformed CSV line from serial | Skipped, counted, no crash |
+| Malformed sentence from serial | Skipped, **counted**, no crash |
+| Bad checksum | Rejected and counted, not silently dropped (`PROTOCOL.md` §4) |
 | Partial line across reads | Reassembled correctly |
+| Unknown trailing fields | Ignored, not an error (`PROTOCOL.md` §1 rule 5) |
+| `$FTMFIX` with `fix_quality=1` | Position treated as absent, never as `0,0,0` |
 | Empty sample window | "No estimate", not 0 |
 | Duplicate BSSID export | Rejected or explicit overwrite prompt |
 
