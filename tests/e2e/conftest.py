@@ -52,14 +52,25 @@ _RESOLVED_KEY = pytest.StashKey[dict]()
 
 
 def _e2e_selected(config: pytest.Config) -> bool:
-    """True when this invocation is actually going to run E2E tests.
+    """True when this invocation is going to run E2E tests.
 
-    `pytest tests/tools` must not go looking for hardware just because this
-    conftest is importable.
+    This conftest is only loaded when something under tests/e2e/ is collected,
+    so the default is yes -- `pytest tests`, `pytest tests/e2e` and
+    `pytest tests -m "not manual"` must all resolve the boards. Guarding on
+    the argument text instead was a bug: `-m "not manual"` mentions neither
+    "e2e" nor the directory, so resolution was skipped and the DUT fixtures
+    then ran unconfigured, as a single board.
+
+    The one exception is an explicit `-m "not e2e"`, which is how a
+    hardware-less runner deselects this level (docs/TESTING.md §7). Probing
+    for boards there would defeat the point of deselecting it.
     """
-    if any("e2e" in str(arg) for arg in config.args):
-        return True
-    return "e2e" in (config.getoption("markexpr", default="") or "")
+    markexpr = " ".join((config.getoption("markexpr", default="") or "").split())
+    if "not e2e" in markexpr:
+        return False
+    # `-m manual` selects only the operator-driven level, which likewise has
+    # no use for the E2E boards.
+    return markexpr != "manual"
 
 
 def pytest_configure(config: pytest.Config) -> None:

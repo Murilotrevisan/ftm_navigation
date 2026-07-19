@@ -107,17 +107,29 @@ def test_read_mac_parses_esptool_output(monkeypatch):
             "esptool.py v4.12.0\nMAC: 14:63:93:8D:98:74\n"
             "Uploading stub...\nMAC: 14:63:93:8d:98:74\n"
         )
+        stderr = ""
+        returncode = 0
 
     monkeypatch.setattr(board_ports.subprocess, "run", lambda *a, **k: FakeProc())
     assert board_ports.read_mac("COM3") == RESPONDER_MAC
 
 
-def test_read_mac_returns_none_when_no_mac_in_output(monkeypatch):
+def test_read_mac_returns_none_and_says_why(monkeypatch, capsys):
+    """A board that does not answer must produce a reason, not a silent None.
+
+    A silent None resurfaces later as "board not attached" for a board that is
+    very much attached -- just busy.
+    """
+
     class FakeProc:
-        stdout = "esptool.py v4.12.0\nA fatal error occurred: Failed to connect\n"
+        stdout = "esptool.py v4.12.0\n"
+        stderr = "A fatal error occurred: Failed to connect to ESP32-C3\n"
+        returncode = 2
 
     monkeypatch.setattr(board_ports.subprocess, "run", lambda *a, **k: FakeProc())
+
     assert board_ports.read_mac("COM9") is None
+    assert "COM9" in capsys.readouterr().err
 
 
 def test_boards_json_is_valid_json_with_the_expected_shape():
