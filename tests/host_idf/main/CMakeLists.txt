@@ -1,0 +1,11 @@
+idf_component_register(
+    SRCS
+        "test_harness_smoke.c"
+        "test_ftm_quality.c"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        unity
+        domain
+        services
+)
