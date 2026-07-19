@@ -1,6 +1,14 @@
-[CmdletBinding()]
 param(
-    [Parameter(ValueFromRemainingArguments = $true)]
+    [Alias('C')]
+    [string] $ProjectDirectory,
+
+    [Alias('B')]
+    [string] $BuildDirectory,
+
+    [Alias('p')]
+    [string] $Port,
+
+    [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
     [string[]] $IdfArguments
 )
 
@@ -21,5 +29,17 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-& idf.py @IdfArguments
+$commandArguments = @()
+if ($ProjectDirectory) {
+    $commandArguments += @('-C', $ProjectDirectory)
+}
+if ($BuildDirectory) {
+    $commandArguments += @('-B', $BuildDirectory)
+}
+if ($Port) {
+    $commandArguments += @('-p', $Port)
+}
+$commandArguments += $IdfArguments
+
+& idf.py @commandArguments
 exit $LASTEXITCODE
