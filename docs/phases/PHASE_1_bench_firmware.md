@@ -5,7 +5,28 @@
 | **Status** | Not started |
 | **Depends on** | Nothing. May run in parallel with Phase 0. |
 | **Blocks** | Phase 2 |
-| **Read first** | `docs/PLAN.md` (all), `docs/HARDWARE_FINDINGS.md` (all), `docs/WORKFLOW.md` (all) |
+| **Branch** | `phase-1/bench-firmware` |
+
+---
+
+## Start here
+
+1. **Read `docs/AGENT_BRIEF.md` first**, then the documents it lists, then this
+   one in full. `docs/HARDWARE_FINDINGS.md` matters most here — this phase is
+   about preserving a known-good hardware reference.
+2. **Create your worktree:**
+   ```bash
+   git worktree add ../ftm-phase-1 -b phase-1/bench-firmware
+   cd ../ftm-phase-1
+   ```
+3. **Runs in parallel with Phase 0.** Phase 0's `tools/dev.ps1` does not exist
+   yet — use the manual ESP-IDF activation in `docs/AGENT_BRIEF.md` §3. Do not
+   touch `docker/` or `tests/` scaffolding; that is Phase 0's territory.
+4. **Done means:** acceptance criteria ticked, full suite green, report written
+   to `docs/reports/phase-1-bench-firmware.md`, branch left for human review.
+
+This is a deliberately small phase. The example already works and is verified on
+both boards — **move it, do not redesign it.**
 
 ---
 

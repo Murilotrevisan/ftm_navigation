@@ -5,7 +5,28 @@
 | **Status** | Not started |
 | **Depends on** | Nothing. May run in parallel with Phase 1. |
 | **Blocks** | Phase 3 (definitive firmware) |
-| **Read first** | `docs/PLAN.md` (all), `docs/CONTAINER.md` (all), `docs/TESTING.md` (all), `docs/WORKFLOW.md` (all) |
+| **Branch** | `phase-0/test-infra` |
+
+---
+
+## Start here
+
+1. **Read `docs/AGENT_BRIEF.md` first**, then the documents it lists, then this
+   one in full. Also read `docs/CONTAINER.md` and `docs/TESTING.md` completely —
+   this phase implements both.
+2. **Create your worktree:**
+   ```bash
+   git worktree add ../ftm-phase-0 -b phase-0/test-infra
+   cd ../ftm-phase-0
+   ```
+3. **Runs in parallel with Phase 1.** Do not touch `tools/bench_firmware/` or
+   `tools/bench/` — that is Phase 1's territory.
+4. **Done means:** acceptance criteria ticked, full suite green, report written
+   to `docs/reports/phase-0-test-infra.md`, branch left for human review.
+
+Docker Desktop, the image and the venv already work on this machine
+(`docs/CONTAINER.md` §8). Your job is to turn that into reproducible tooling,
+not to rediscover it.
 
 ---
 

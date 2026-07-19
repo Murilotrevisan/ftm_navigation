@@ -5,7 +5,30 @@
 | **Status** | Not started |
 | **Depends on** | Phase 0 (test harness), Phase 2 (calibration CSV schema) |
 | **Blocks** | Phase 4, Phase 5 |
-| **Read first** | `docs/PLAN.md` (all), `docs/ARCHITECTURE.md` (all), `docs/HARDWARE_FINDINGS.md` (all), `docs/TESTING.md` §3–4, `docs/WORKFLOW.md` (all), `docs/CONTAINER.md` (all) |
+| **Branches** | one per sub-phase: `phase-3a/domain-types` … `phase-3e/calibration-table` |
+
+---
+
+## Start here
+
+1. **Read `docs/AGENT_BRIEF.md` first**, then the documents it lists, then this
+   one in full. Also read **`docs/ARCHITECTURE.md` in full** — this phase
+   implements it — and `docs/RTOS.md` before sub-phase 3d.
+2. **One worktree and branch per sub-phase**, e.g.:
+   ```bash
+   git worktree add ../ftm-phase-3b -b phase-3b/domain-core
+   cd ../ftm-phase-3b
+   ```
+3. **Sub-phases are strictly ordered (3a → 3e)** and each is separately
+   assignable and separately reviewed. Do not start one before its predecessor
+   is merged.
+4. **Requires Phases 0 and 2.**
+5. **Done means:** per sub-phase — acceptance criteria ticked, full suite green,
+   report written to `docs/reports/phase-3<x>-<name>.md`, branch left for human
+   review.
+
+Later sub-phases run earlier sub-phases' tests. **If you break one, fix your
+implementation — never the test** (`docs/WORKFLOW.md` §3).
 
 ---
 

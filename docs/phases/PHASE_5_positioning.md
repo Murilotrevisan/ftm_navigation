@@ -5,7 +5,33 @@
 | **Status** | Not started |
 | **Depends on** | Phase 3, Phase 4 (protocol + logs + replay) |
 | **Blocks** | Phase 6 (E2E and movement test) |
-| **Read first** | `docs/PLAN.md` (all), `docs/ARCHITECTURE.md` §4, `docs/PROTOCOL.md` (all), `docs/HARDWARE_FINDINGS.md` §2, §8, §10, `docs/WORKFLOW.md` (all) |
+| **Branches** | `phase-5a/positioning-host`, then `phase-5b/positioning-target` |
+
+---
+
+## Start here
+
+1. **Read `docs/AGENT_BRIEF.md` first**, then the documents it lists, then this
+   one in full. Also read `docs/ARCHITECTURE.md` §6 (positioning modes) and
+   `docs/PROTOCOL.md` §7 (replay).
+2. **Two branches, strictly ordered — host first:**
+   ```bash
+   git worktree add ../ftm-phase-5a -b phase-5a/positioning-host
+   cd ../ftm-phase-5a
+   ```
+   `phase-5b/positioning-target` starts only after 5a is merged.
+3. **Requires Phases 3 and 4** — 5a is driven by Phase 4's `.ftmlog` replay.
+4. **Done means:** per sub-phase — acceptance criteria ticked, full suite green,
+   report written to `docs/reports/phase-5<x>-positioning-<host|target>.md`,
+   branch left for human review.
+
+**Do not write a host prototype to "port" later.** Ported code is different
+code and proves nothing. One source file in `domain/core/`, compiled natively in
+5a and for the target in 5b.
+
+With 2 boards this phase produces **no 3D fix on hardware, ever** — and the
+valuable E2E assertion is exactly that it reports `RANGE_ONLY` honestly instead
+of inventing one.
 
 ---
 

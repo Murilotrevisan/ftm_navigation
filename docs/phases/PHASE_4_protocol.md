@@ -5,7 +5,29 @@
 | **Status** | Not started |
 | **Depends on** | Phase 3 (definitive firmware) |
 | **Blocks** | Phase 5 (positioning), Phase 6 (E2E) |
-| **Read first** | `docs/PROTOCOL.md` (all), `docs/PLAN.md` (all), `docs/ARCHITECTURE.md` §4, `docs/HARDWARE_FINDINGS.md` (all), `docs/WORKFLOW.md` (all) |
+| **Branch** | `phase-4/protocol` |
+
+---
+
+## Start here
+
+1. **Read `docs/AGENT_BRIEF.md` first**, then the documents it lists, then this
+   one in full. Also read **`docs/PROTOCOL.md` in full** — it is the
+   specification you are implementing — plus `docs/ARCHITECTURE.md` §2 and §4
+   (swappable modules, serialiser interface) and `docs/RTOS.md` §5 (`msg_seq`).
+2. **Create your worktree:**
+   ```bash
+   git worktree add ../ftm-phase-4 -b phase-4/protocol
+   cd ../ftm-phase-4
+   ```
+3. **Requires Phase 3** — the serialiser interface is defined in sub-phase 3d.
+4. **Done means:** acceptance criteria ticked, full suite green, a **real
+   recorded** `.ftmlog` committed as a fixture, report written to
+   `docs/reports/phase-4-protocol.md`, branch left for human review.
+
+You are implementing **one serialiser behind an interface**, not a hardwired
+format. The contract suite you write must target `ftm_serializer_t`, never
+`ftmbin` directly — a future protobuf implementation has to pass it unmodified.
 
 ---
 

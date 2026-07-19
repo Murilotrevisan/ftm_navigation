@@ -5,7 +5,32 @@
 | **Status** | Not started |
 | **Depends on** | Phase 3, Phase 4 (protocol), Phase 5 (positioning) |
 | **Blocks** | Nothing — final phase |
-| **Read first** | `docs/PLAN.md` (all), `docs/TESTING.md` §5–6, `docs/HARDWARE_FINDINGS.md` §7–8, §10, `docs/WORKFLOW.md` (all), `docs/CONTAINER.md` (all) |
+| **Branch** | `phase-6/e2e-and-manual` |
+
+---
+
+## Start here
+
+1. **Read `docs/AGENT_BRIEF.md` first**, then the documents it lists, then this
+   one in full. Also read `docs/TESTING.md` §5–6 and
+   `docs/HARDWARE_FINDINGS.md` §7, §8 and §10 — the drift and the 1.00 m
+   fixture drive every assertion here.
+2. **Create your worktree:**
+   ```bash
+   git worktree add ../ftm-phase-6 -b phase-6/e2e-and-manual
+   cd ../ftm-phase-6
+   ```
+3. **Requires Phases 3, 4 and 5.**
+4. **Done means:** acceptance criteria ticked, autonomous suite green,
+   operator-driven test runnable with clear prompts, report written to
+   `docs/reports/phase-6-e2e-and-manual.md`, branch left for human review.
+
+The movement test is **executed by the human operator**, not by you. You build
+it, document it, and produce the analysis; you do not run it. It emits evidence
+(a chart plus a self-sufficient JSON), and it does **not** pass or fail itself.
+
+**An honest negative result is a valid outcome.** If drift dominates motion, say
+so plainly — do not tune until the chart looks good.
 
 ---
 

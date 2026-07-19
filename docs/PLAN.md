@@ -1,14 +1,12 @@
 # FTM Indoor Positioning — Master Plan
 
-> **Read this first.** This document is the index. Each phase has its own
-> self-contained document under `docs/phases/`. An agent assigned a phase should
-> read: this file, `docs/HARDWARE_FINDINGS.md`, `docs/WORKFLOW.md`,
-> `docs/CONTAINER.md`, and its own phase document. Only read other phase
-> documents if the handoff section says to.
+> **Agents: start at `docs/AGENT_BRIEF.md`**, then your phase document under
+> `docs/phases/`. Each phase document opens with a **Start here** block giving
+> its branch, worktree command, dependencies and definition of done — it is a
+> complete work order.
 >
-> **Before writing any code, read `docs/WORKFLOW.md`.** It contains the
-> branching rules, the merge gate, the regression rule, and the required work
-> report — all binding.
+> This document is the index and the source of the project-wide constraints
+> (§5). `docs/HARDWARE_FINDINGS.md` is normative measured fact.
 
 ---
 
@@ -50,6 +48,7 @@ new measurements.
 ftm_measurement/
 ├── docs/
 │   ├── PLAN.md                   <- this file
+│   ├── AGENT_BRIEF.md            <- agent onboarding; read before any phase
 │   ├── HARDWARE_FINDINGS.md      <- verified measurements, normative
 │   ├── ARCHITECTURE.md           <- layering, swappable modules, contracts
 │   ├── RTOS.md                   <- tasks, queue, overflow policy

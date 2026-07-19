@@ -5,7 +5,27 @@
 | **Status** | Not started |
 | **Depends on** | Phase 1 (bench tooling, host scripts) |
 | **Blocks** | Phase 3 (needs the calibration table format) |
-| **Read first** | `docs/PLAN.md` (all), `docs/HARDWARE_FINDINGS.md` (all), `docs/ARCHITECTURE.md` §6, `docs/WORKFLOW.md` (all), `docs/CONTAINER.md` (all) |
+| **Branch** | `phase-2/calibrator` |
+
+---
+
+## Start here
+
+1. **Read `docs/AGENT_BRIEF.md` first**, then the documents it lists, then this
+   one in full. Also read `docs/ARCHITECTURE.md` §8 (calibration data flow).
+2. **Create your worktree:**
+   ```bash
+   git worktree add ../ftm-phase-2 -b phase-2/calibrator
+   cd ../ftm-phase-2
+   ```
+3. **Requires Phase 1** to be merged — this builds on its host tooling.
+4. **Done means:** acceptance criteria ticked, full suite green, a real
+   calibration CSV produced, report written to
+   `docs/reports/phase-2-calibrator.md`, branch left for human review.
+
+**Read `docs/HARDWARE_FINDINGS.md` §8 before designing anything.** The system
+drifts by more than a metre at a fixed setup over tens of seconds. A UI that
+takes a reading and computes an offset will produce confident garbage.
 
 ---
 
