@@ -1,0 +1,36 @@
+# Build + host-unit-test container.
+#
+# Scope, deliberately narrow (docs/CONTAINER.md): this container builds
+# firmware and runs host unit tests. It NEVER touches the boards. There is no
+# `devices:` key and no `privileged:` key in this file, and adding either is a
+# scope violation -- flashing and E2E run on the Windows host, which avoids
+# USB passthrough into WSL entirely.
+#
+# Paths are relative to this file, so `..` is the repository root.
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ftm-dev:latest
+    working_dir: /project
+    volumes:
+      # Mounted, not copied: edits made on Windows are visible immediately and
+      # build output lands back in the working tree.
+      - ..:/project
+      # ccache survives container restarts. ESP-IDF builds are slow otherwise.
+      - ftm-ccache:/ccache
+    environment:
+      IDF_CCACHE_ENABLE: "1"
+      CCACHE_DIR: /ccache
+      # Overridden by tools/dev.sh on Linux/WSL to $(id -u):$(id -g) so build
+      # output is not root-owned. On Docker Desktop for Windows the bind mount
+      # is drvfs and every file surfaces as the Windows user regardless -- see
+      # docker/README.md.
+      FTM_UID: "${FTM_UID:-0}"
+      FTM_GID: "${FTM_GID:-0}"
+    user: "${FTM_UID:-0}:${FTM_GID:-0}"
+    init: true
+
+volumes:
+  ftm-ccache:
