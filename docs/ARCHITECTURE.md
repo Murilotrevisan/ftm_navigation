@@ -145,9 +145,38 @@ The two-board setup is a fixture, not the design.
 - At ~1.5 s per session (see `HARDWARE_FINDINGS.md` §2), a full cycle over N
   anchors takes ~1.5·N seconds. With 4 anchors that is ~6 s per 3D fix. This is
   a known, accepted limitation — record it, do not silently optimise it away.
-- Trilateration needs **≥4 non-coplanar anchors** for an unambiguous 3D fix.
-  With fewer, the solver must return a well-defined degenerate result, not
-  garbage. See `docs/TESTING.md` §4 for the required degenerate cases.
+### Positioning modes — the range-only fallback
+
+Trilateration needs **≥4 non-coplanar anchors** for an unambiguous 3D fix. With
+only 2 boards today, that is not achievable on hardware, so the system has two
+explicit modes:
+
+```c
+typedef enum {
+    FTM_FIX_NONE,        /* no usable ranges this cycle          */
+    FTM_FIX_RANGE_ONLY,  /* < 4 anchors, or degenerate geometry  */
+    FTM_FIX_POSITION_3D, /* >= 4 non-coplanar anchors            */
+} ftm_fix_mode_t;
+```
+
+**Rule: if fewer than 4 usable anchors are found, report `RANGE_ONLY`** — a list
+of `(station_id, distance_cm)` pairs, one per anchor ranged. No position is
+computed and none is guessed.
+
+This is not a degraded error path; it is a **useful product state**. Per-station
+distances are a valid reference reading, they let the visualisation exist and be
+exercised long before four boards are available, and they make the system's
+honesty visible: it says what it measured rather than inventing a coordinate.
+
+Requirements:
+
+- The mode is **explicit in the output**. A consumer must never infer it from
+  whether a position field happens to be populated.
+- Degenerate geometry with ≥4 anchors also yields `RANGE_ONLY`, with the
+  degeneracy as the stated reason — never a bogus 3D fix.
+- Dropping below 4 anchors must **not** leave a stale 3D fix visible.
+- All 3D logic is nonetheless fully validated **in host simulation** (Lsim), so
+  it is correct and tested before four boards ever exist.
 
 ## 5. The empty `drivers/devices/` layer
 

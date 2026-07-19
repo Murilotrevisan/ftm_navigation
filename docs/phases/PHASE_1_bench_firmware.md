@@ -5,7 +5,7 @@
 | **Status** | Not started |
 | **Depends on** | Nothing. May run in parallel with Phase 0. |
 | **Blocks** | Phase 2 |
-| **Read first** | `docs/PLAN.md` §1–6, `docs/HARDWARE_FINDINGS.md` (all) |
+| **Read first** | `docs/PLAN.md` (all), `docs/HARDWARE_FINDINGS.md` (all), `docs/WORKFLOW.md` (all) |
 
 ---
 
@@ -13,6 +13,9 @@
 
 Preserve the working Espressif FTM console example as a **board bring-up and
 validation tool** under `tools/`, plus the host scripts that drive it.
+
+**Decision confirmed by the reviewer: keep the console example.** It stays as a
+known-good hardware reference for manual probing, under `tools/`.
 
 **This is deliberately a small phase.** The example already works and is already
 verified on both boards. Do not redesign it. Its job is to answer one question
@@ -129,6 +132,8 @@ Lighter than product code, but not absent:
 
 ## Open questions
 
-- Should `validate_board.py` also record a baseline fingerprint per board (mean
-  raw RTT at a fixed reference distance) for later comparison? Useful for
-  detecting a degrading board, but requires a fixed physical jig.
+- ~~Should the console example be kept?~~ **Resolved: yes**, kept under `tools/`.
+- Should `validate_board.py` record a baseline fingerprint per board (mean raw
+  RTT at the fixed 1.00 m reference) for later comparison? The physical jig now
+  exists (findings §10), so this is feasible — useful for detecting a degrading
+  board over time. Recommend yes; confirm with the reviewer.

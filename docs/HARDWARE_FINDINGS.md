@@ -131,6 +131,26 @@ timescale of tens of seconds**, with RSSI moving simultaneously.
 - Any test asserting an absolute distance must use a **tolerance band and a
   sample count**, never a single reading.
 
+## 10. Standing test fixture — boards fixed at 1.00 m
+
+**The two boards are physically fixed 1.00 m apart** for development. This is a
+permanent bench fixture, not a temporary arrangement.
+
+Consequences:
+
+- **Autonomous tests may assert against a 1.00 m ground truth** without an
+  operator present. This is what makes L3 E2E distance assertions possible at
+  all.
+- Any test asserting distance must still use a **tolerance band and a minimum
+  sample count** — at this exact separation the measured spread was
+  0.75–1.65 m (§7) and drift is real (§8). A tight assertion will flake.
+- Suggested E2E band: mean over ≥ 60 samples, expected 1.00 m, tolerance ±0.75 m,
+  valid ratio ≥ 0.8. Tighten only with measured justification.
+- If an agent finds readings consistently far outside this band, the likely
+  causes in order are: boards moved, clamp condition (§4, §6), wrong calibration
+  offset (§5), or drift (§8) — **not** a broken algorithm. Check the fixture
+  first.
+
 ## 9. Defects in the Espressif example
 
 Relevant when reusing its code as reference.

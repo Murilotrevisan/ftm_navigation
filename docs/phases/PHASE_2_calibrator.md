@@ -5,7 +5,7 @@
 | **Status** | Not started |
 | **Depends on** | Phase 1 (bench tooling, host scripts) |
 | **Blocks** | Phase 3 (needs the calibration table format) |
-| **Read first** | `docs/PLAN.md` §1–6, `docs/HARDWARE_FINDINGS.md` (all), `docs/ARCHITECTURE.md` §6 |
+| **Read first** | `docs/PLAN.md` (all), `docs/HARDWARE_FINDINGS.md` (all), `docs/ARCHITECTURE.md` §6, `docs/WORKFLOW.md` (all), `docs/CONTAINER.md` (all) |
 
 ---
 
@@ -143,10 +143,18 @@ L4 pytest, covering `docs/TESTING.md` §4.1, §4.2, §4.6:
 Use **recorded real serial transcripts** as fixtures. Capture them from the
 hardware; do not hand-write plausible-looking data.
 
+> **UI placement note.** The tkinter UI is operator-facing and runs on Windows.
+> Its **logic lives in `model.py`, which must be tkinter-free** so it is tested
+> headlessly inside the container (`docs/CONTAINER.md`). Do not add a headless
+> display server to the container to test the widgets — enforce the split
+> instead.
+
 ## E2E test (L3, autonomous)
 
 `tests/e2e/test_calibration.py`:
-- Flash calibrator firmware to COM3 (responder) and COM4 (initiator).
+- Flash calibrator firmware to the responder and initiator boards, resolved
+  **by MAC** (`docs/CONTAINER.md` §5). The boards are fixed **1.00 m apart**
+  (findings §10), so the true distance is known without an operator.
 - Collect ≥ 60 samples at offset 0; record mean.
 - Set offset −200 cm; collect ≥ 60 samples.
 - Assert the mean shifted by +2.00 m **within tolerance ±0.5 m** and that valid

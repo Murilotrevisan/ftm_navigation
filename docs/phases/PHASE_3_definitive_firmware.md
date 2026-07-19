@@ -5,7 +5,7 @@
 | **Status** | Not started |
 | **Depends on** | Phase 0 (test harness), Phase 2 (calibration CSV schema) |
 | **Blocks** | Phase 4, Phase 5 |
-| **Read first** | `docs/PLAN.md` (all), `docs/ARCHITECTURE.md` (all), `docs/HARDWARE_FINDINGS.md` (all), `docs/TESTING.md` §3–4 |
+| **Read first** | `docs/PLAN.md` (all), `docs/ARCHITECTURE.md` (all), `docs/HARDWARE_FINDINGS.md` (all), `docs/TESTING.md` §3–4, `docs/WORKFLOW.md` (all), `docs/CONTAINER.md` (all) |
 
 ---
 
@@ -31,6 +31,12 @@ flag**, not work around:
 5. Design for **N anchors**. Two boards is the test fixture.
 6. No hardcoded calibration constants.
 7. Every feature has worst-case unit tests, not just happy path.
+8. Each sub-phase is its own **branch** (`phase-3a/...`); `main` is never
+   committed to directly, and merges are human-approved after the full suite
+   passes and results are shown (`docs/WORKFLOW.md` §1–2).
+9. **Never weaken a pre-existing test** to make your change pass. Sub-phase 3c
+   will run 3b's tests; if you break them, fix your code or stop and ask
+   (`docs/WORKFLOW.md` §3).
 
 ---
 

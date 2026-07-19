@@ -1,7 +1,7 @@
-# Testing Strategy — Proposal for Review
+# Testing Strategy
 
-> **STATUS: AWAITING APPROVAL.** Section 2 contains a framework decision that
-> needs a human sign-off before Phase 3 begins. Everything else follows from it.
+> **STATUS: SETTLED.** The framework question is closed — see §2. Everything in
+> this document runs inside the container described in `docs/CONTAINER.md`.
 
 ---
 
@@ -9,61 +9,61 @@
 
 | Level | Scope | Framework | Runs on | Speed |
 | --- | --- | --- | --- | --- |
-| **L1 Unit — host** | `domain/types`, `domain/core`, `services/*` | Unity + CMock (via Ceedling) | PC, no hardware | < 1 s |
+| **L1 Unit — host** | `domain/types`, `domain/core`, `services/*` | **ESP-IDF `linux` target** + Unity + CMock | Container, no hardware | seconds |
 | **L2 Unit — target** | `drivers/peripherals/wifi` | Unity (ESP-IDF `test_apps`) | ESP32-C3 | ~30 s |
-| **L3 E2E — two boards** | Full firmware, both roles | pytest + pytest-embedded | COM3 + COM4 | minutes |
-| **L4 Host tools** | calibrator UI, codegen scripts | pytest | PC | seconds |
-| **L5 Manual integration** | Physical movement → chart | pytest, human-in-loop | COM3 + COM4 + operator | ~10 min |
+| **L3 E2E — two boards** | Full firmware, both roles | pytest + pytest-embedded | Both boards | minutes |
+| **L4 Host tools** | calibrator UI, codegen scripts | pytest | Container | seconds |
+| **L5 Manual integration** | Physical movement → chart | pytest, human-in-loop | Both boards + operator | ~10 min |
+| **Lsim Simulation** | 3D trilateration, N≥4 anchors | ESP-IDF `linux` target | Container, no hardware | seconds |
 
-The layering in `docs/ARCHITECTURE.md` exists to make L1 possible: `domain/` has
-zero ESP-IDF dependencies, so the bulk of the logic is testable in under a
-second with no board attached.
+The layering in `docs/ARCHITECTURE.md` exists to make L1 and Lsim possible:
+`domain/` has zero ESP-IDF dependencies, so the bulk of the logic — including
+all the 3D positioning maths — is testable with no board attached.
 
-## 2. Framework decision (REVIEW REQUIRED)
+## 2. Framework decision — SETTLED
 
-### Recommended
+**Use ESP-IDF's own host-test mechanism.** Verified present in the installed
+ESP-IDF v5.5.2:
 
-**L1 — Ceedling (Unity + CMock).**
-- CMock **generates C mocks directly from headers** — point it at
-  `wifi_ftm.h` and it produces `mock_wifi_ftm.c` with expectation/stub APIs. No
-  hand-written fakes to drift out of sync.
-- Unity is already ESP-IDF's test framework, so assertions look the same at L1
-  and L2 — one idiom for the whole project.
-- Sub-second feedback on the pure logic, which is where the interesting
-  worst-case behaviour lives (clamp, overflow, degenerate geometry).
-- **Cost: requires Ruby on Windows** (`winget install RubyInstaller.Ruby`).
-  One-time setup.
+| Component | Path | Status |
+| --- | --- | --- |
+| Linux target toolchain | `tools/cmake/toolchain-linux.cmake` | present |
+| Linux target port | `components/esp_system/port/soc/linux` | present |
+| Unity | `components/unity` | present |
+| **CMock** | `components/cmock` | present (bundled, `REQUIRES unity`) |
 
-**L2 — Unity via ESP-IDF `test_apps`.** The standard ESP-IDF 5.x pattern
-(`components/<name>/test_apps/`), driven by pytest-embedded. Anything touching
-`esp_wifi` must run on silicon; there is no meaningful way to fake the FTM
-hardware timing path.
+So L1 is `idf.py --preview set-target linux` + Unity + CMock — all first-party,
+already in the toolchain, and running natively in the Linux container.
 
-**L3/L5 — pytest + `pytest-embedded-serial-esp` + `pytest-embedded-idf`.**
-Espressif's own E2E harness. Handles build, flash, serial attach, and log
-expectation for **multiple DUTs in one test** — which is exactly the two-board
-topology. Multi-DUT is a first-class feature (`--count 2`), so the two boards
-become `dut[0]` and `dut[1]` rather than hand-rolled serial plumbing.
+**Ceedling and Ruby are no longer needed and are not used.** The earlier
+proposal recommended Ceedling because ESP-IDF's Linux target needed WSL on
+Windows; the container removes that objection entirely, and using ESP-IDF's own
+framework is strictly better: one toolchain, one set of Unity assertions across
+L1/L2/Lsim, no second build system to keep in sync.
 
-**L4 — plain pytest.** The calibrator is Python; nothing exotic needed.
+CMock still provides what made Ceedling attractive — **C mocks generated
+directly from headers**, so a mock of `wifi_ftm.h` cannot silently drift from
+the real interface.
+
+**L2** — Unity via ESP-IDF `test_apps` (`components/<name>/test_apps/`), driven
+by pytest-embedded. Anything touching `esp_wifi` must run on silicon; there is
+no meaningful way to fake the FTM hardware timing path.
+
+**L3/L5** — pytest + `pytest-embedded-idf` + `pytest-embedded-serial-esp`.
+Espressif's own E2E harness, with first-class **multi-DUT** support
+(`--count 2`), which is exactly the two-board topology. The boards become
+`dut[0]` and `dut[1]` rather than hand-rolled pyserial plumbing.
+
+**L4** — plain pytest.
 
 ### Rejected, with reasons
 
 | Option | Why not |
 | --- | --- |
-| **gmock / gtest** | C++ frameworks. The firmware is C. Wrapping C modules in C++ fixtures adds friction, and CMock generates C mocks from the real headers with less ceremony. Would only make sense if the firmware were C++. |
-| **Hand-written fakes instead of CMock** | Drift. A fake that isn't regenerated from the header silently diverges when the interface changes, and the test keeps passing. |
-| **ESP-IDF `linux` target for L1** | Attractive (no Ruby), but on Windows it needs WSL, adding a heavier dependency than Ruby. Worth revisiting if the team moves to Linux CI. |
-| **Everything on-target** | Too slow to run per-edit; kills the feedback loop that makes worst-case testing practical. |
-
-### The one real risk
-
-Ceedling's Ruby dependency on Windows. **Fallback if rejected:** a CMake +
-Unity + CMock host harness driven by CTest — no Ruby, but the mock generation
-step must be wired manually and there is more boilerplate per test target.
-
-> **Reviewer: please confirm or redirect the L1 choice (Ceedling vs. CMake/CTest
-> harness). Everything else is low-controversy.**
+| **gmock / gtest** | C++ frameworks; the firmware is C. CMock generates C mocks from the real headers with far less ceremony. |
+| **Ceedling** | Superseded. Added Ruby and a second build system for capability ESP-IDF already ships. |
+| **Hand-written fakes instead of CMock** | Drift. A fake not regenerated from the header silently diverges when the interface changes, and the test keeps passing. |
+| **Everything on-target** | Too slow per-edit; kills the feedback loop that makes worst-case testing practical. |
 
 ## 3. Coverage requirement
 
@@ -157,11 +157,30 @@ not hypotheticals. Agents must cover the ones relevant to their module.
 | Failed sample (no measurement) | Emits a row with non-zero status and empty fields — dropouts must be visible, not hidden |
 | Field containing a separator | Escaped or rejected |
 
+### 4.8 Range-only fallback (`services/middleware`, see PHASE_4)
+
+Fewer than 4 anchors means no 3D fix. The system falls back to reporting per-
+station linear distances (`docs/ARCHITECTURE.md` §4).
+
+| Case | Required behaviour |
+| --- | --- |
+| 0 anchors ranged | Explicit "no data" state; not an empty success |
+| 1–3 anchors ranged | `RANGE_ONLY` result listing `(station_id, distance_cm)` per anchor |
+| ≥4 anchors but coplanar | `RANGE_ONLY`, with degeneracy as the stated reason — **not** a bogus 3D fix |
+| ≥4 anchors, good geometry | `POSITION_3D` result |
+| Mode changes between cycles | Consumers must handle the transition; no stale 3D fix retained after dropping below 4 |
+| A station drops out mid-run | Falls back to `RANGE_ONLY` cleanly |
+
+The mode must be **explicit in the output**, never inferred by the consumer from
+whether a position field happens to be populated.
+
 ## 5. E2E test requirements (L3)
 
 E2E tests **run autonomously** — no human in the loop.
 
-- Both boards are permanently connected: **COM3** and **COM4**.
+- Both boards are permanently connected, and **physically fixed 1.00 m apart**
+  (see `docs/HARDWARE_FINDINGS.md` §10). This is the standing test fixture:
+  tests may assert against a 1 m ground truth without an operator.
 - Tests must build, flash, and run without manual steps.
 - Every E2E test file starts with a **"How to run"** block giving the exact
   command.
@@ -173,12 +192,17 @@ Skeleton the phase docs should follow:
 
 ```
 tests/e2e/
-├── conftest.py            # fixtures: dut_responder (COM3), dut_initiator (COM4)
+├── conftest.py            # fixtures: dut_responder, dut_initiator (by MAC, not port)
 ├── test_smoke.py          # boots, roles start, responder advertises FTM
 ├── test_session.py        # initiator completes a session, valid ratio >= 0.8
 ├── test_calibration.py    # offset applied -> reported distance shifts linearly
+├── test_range_only.py     # <4 anchors -> RANGE_ONLY, never a fabricated 3D fix
 └── README.md              # how to run, expected duration, troubleshooting
 ```
+
+Fixtures resolve boards by **MAC address, not port number** — ports re-enumerate
+unpredictably, and flashing the wrong role onto the wrong board produces a very
+confusing failure (`docs/CONTAINER.md` §5).
 
 ## 6. Manual integration test (L5)
 

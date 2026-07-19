@@ -2,8 +2,12 @@
 
 > **Read this first.** This document is the index. Each phase has its own
 > self-contained document under `docs/phases/`. An agent assigned a phase should
-> read: this file (sections 1–4), `docs/HARDWARE_FINDINGS.md`, and its own phase
-> document. Only read other phase documents if the handoff section says to.
+> read: this file (sections 1–7), `docs/HARDWARE_FINDINGS.md`,
+> `docs/WORKFLOW.md`, `docs/CONTAINER.md`, and its own phase document. Only read
+> other phase documents if the handoff section says to.
+>
+> **Before writing any code, read `docs/WORKFLOW.md`.** It contains the
+> branching rules, the merge gate, and the regression rule — all binding.
 
 ---
 
@@ -30,6 +34,9 @@ Build a **3D indoor positioning system** from ESP32-C3 boards using Wi-Fi FTM
 | Board B — COM4, ESP32-C3 rev v0.4, MAC `14:63:93:8d:96:e4` | Working, used as initiator |
 | Espressif FTM console example | Built, flashed, end-to-end FTM verified |
 | Measured baseline at ~1.2 m separation | mean 1.22 m, 28–30/30 valid readings |
+| **Bench fixture: boards fixed 1.00 m apart** | Standing setup — tests may assert 1 m ground truth |
+| Git repository | Initialised, branch `main`, initial commit present |
+| Build/test container | **Not built** — Phase 0 deliverable, one open decision |
 
 All hardware facts are in **`docs/HARDWARE_FINDINGS.md`**. That document is
 normative — do not re-derive these numbers, and do not contradict them without
@@ -44,6 +51,8 @@ ftm_measurement/
 │   ├── HARDWARE_FINDINGS.md      <- verified measurements, normative
 │   ├── ARCHITECTURE.md           <- layering, strategy pattern, contracts
 │   ├── TESTING.md                <- test framework + worst-case catalogue
+│   ├── CONTAINER.md              <- build/test/flash container (ONE OPEN DECISION)
+│   ├── WORKFLOW.md               <- git rules, merge gate, regression rule
 │   └── phases/
 │       ├── PHASE_0_test_infra.md
 │       ├── PHASE_1_bench_firmware.md
@@ -97,11 +106,36 @@ These apply to every phase. An agent violating one should stop and flag it.
 4. **Role selection (initiator vs responder) uses the Strategy pattern, selected
    by Kconfig.** No `#ifdef` scattered through business logic.
 5. **Design for N anchors.** Two boards is the current test fixture, not the
-   architecture.
+   architecture. With fewer than 4 usable anchors the system reports
+   **`RANGE_ONLY`** — per-station distances — and never fabricates a 3D fix.
+   See `docs/ARCHITECTURE.md` §4.
 6. **Never hardcode calibration constants in logic.** They come from the
    generated calibration table (Phase 2 output).
+7. **All builds and tests run in the container** (`docs/CONTAINER.md`). Nothing
+   is installed into the Windows host toolchain.
+8. **Branch per feature; `main` is never committed to directly.** Merges are
+   human-approved after all tests pass and the results have been shown. See
+   `docs/WORKFLOW.md`.
+9. **Never weaken a pre-existing test to make your change pass.** If you break
+   a test you did not write, fix your implementation or stop and ask. This is
+   the regression rule in `docs/WORKFLOW.md` §3 and it is absolute.
 
 ## 6. Environment setup (every agent needs this)
+
+**Use the container** (`docs/CONTAINER.md`). All builds and tests run there.
+Once Phase 0 is done this is the whole story:
+
+```powershell
+.\tools\dev.ps1 test        # all autonomous tests
+.\tools\dev.ps1 build
+.\tools\dev.ps1 flash responder
+```
+
+### Host ESP-IDF (legacy path, pre-container only)
+
+The Windows host also has ESP-IDF v5.5.2 at `C:\Users\murilo\esp\v5.5.2`. It was
+used for the initial evaluation and remains usable, but **new work should not
+depend on it**.
 
 `export.ps1` fails from a plain PowerShell session because the Microsoft Store
 `python` alias shadows the IDF Python. Always prepend the IDF Python first:

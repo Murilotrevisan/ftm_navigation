@@ -5,7 +5,7 @@
 | **Status** | Not started |
 | **Depends on** | Phase 3, Phase 4 |
 | **Blocks** | Nothing — final phase |
-| **Read first** | `docs/PLAN.md` §1–6, `docs/TESTING.md` §5–6, `docs/HARDWARE_FINDINGS.md` §7–8 |
+| **Read first** | `docs/PLAN.md` (all), `docs/TESTING.md` §5–6, `docs/HARDWARE_FINDINGS.md` §7–8, §10, `docs/WORKFLOW.md` (all), `docs/CONTAINER.md` (all) |
 
 ---
 
@@ -28,14 +28,19 @@ suite: one command, documented duration, clear failures.
 
 ```
 tests/e2e/
-├── conftest.py             # from Phase 0: dut_responder COM3, dut_initiator COM4
+├── conftest.py             # from Phase 0: boards resolved by MAC, not port
 ├── test_smoke.py           # Phase 3
 ├── test_session.py         # Phase 3
 ├── test_role_strategy.py   # Phase 3
 ├── test_calibration.py     # Phase 2
-├── test_multi_station.py   # Phase 4
+├── test_range_only.py      # Phase 4
 └── README.md               # HOW TO RUN — exact commands, duration, troubleshooting
 ```
+
+The movement test requires the operator to **move a board, breaking the fixed
+1.00 m fixture** (findings §10). Its README must instruct the operator to
+**restore the 1.00 m spacing afterwards**, since the autonomous suite asserts
+against it.
 
 **Requirements**
 
