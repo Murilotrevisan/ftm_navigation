@@ -147,8 +147,17 @@ Anything done differently from the phase doc, and why.
 Anything added, dropped, or deferred relative to the original scope.
 Include what was NOT done and why.
 
+## Evidence per acceptance criterion
+One entry per criterion in the phase document, each with the command run
+and its verbatim output. Unticked criteria say what was attempted and what
+happened. A criterion with no pasted output is not met.
+
 ## Test results
 Actual output. Pass/fail counts per level, duration, skips with reasons.
+
+## Blockers encountered
+For each: what failed, the diagnostic commands run, their output, and the
+root cause. A blocker asserted without diagnostic output is not a blocker.
 
 ## New findings
 Anything learned about the hardware or toolchain. If HARDWARE_FINDINGS.md
@@ -163,9 +172,14 @@ Rules:
 - **Deviations and scope changes are the point of the report.** A report that
   only says "built what was asked, all tests pass" is either wrong or not
   looking hard enough.
+- **Every acceptance criterion needs pasted output.** Describing what a file
+  contains is not evidence that it works. Code that has never been executed is
+  not delivered work (`docs/AGENT_BRIEF.md` §5).
+- **A blocker is a claim about the environment, and it gets verified before it
+  gets written down** (`docs/AGENT_BRIEF.md` §6). Diagnose the failure; do not
+  assume its cause and design around it.
 - Report failures and skipped work plainly. Do not describe unverified work as
   verified.
-- Paste real test output, not a claim about it (§2).
 - The report is written **before** requesting review, not after approval.
 
 ## 7. What to do when blocked

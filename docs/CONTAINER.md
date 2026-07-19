@@ -127,10 +127,20 @@ to know which side a given command runs on.
 
 Ports re-enumerate unpredictably. **Bind roles to MAC address, not port.**
 
-| Board | MAC | Intended role |
-| --- | --- | --- |
-| A | *(record during Phase 0)* | Responder / anchor |
-| B | `14:63:93:8d:96:e4` | Initiator |
+| Board | MAC | Port seen on | Intended role |
+| --- | --- | --- | --- |
+| A | `14:63:93:8d:98:74` | COM3 | Responder / anchor |
+| B | `14:63:93:8d:96:e4` | COM4 | Initiator |
+
+Board A's SoftAP BSSID is `14:63:93:8d:98:75` — the base MAC **+1**, which is
+how ESP32 derives the AP interface address. Useful as a cross-check: an AP
+BSSID one above a known base MAC confirms which board is advertising.
+
+Read either MAC in one command, no firmware required:
+
+```powershell
+.\.venv\Scripts\python.exe -m esptool --port COM3 read_mac
+```
 
 `dev.ps1 flash <role>` must resolve the role to a MAC, probe attached devices,
 and flash the right one — **failing loudly if the expected board is absent**.
@@ -143,9 +153,25 @@ Boards are physically fixed **1.00 m apart** (`HARDWARE_FINDINGS.md` §10).
 
 | Symptom | Cause |
 | --- | --- |
+| **`docker` not found / "permission denied" in a fresh shell** | **A PATH problem, not a permissions problem.** Docker Desktop adds itself to the *Machine* PATH; a shell opened before or during install lacks it. Refresh: `$env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")`. Verify with `docker info` before concluding Docker is unavailable. |
 | **All commands after the first silently do nothing** | **`bash -lc` breaks in this image — use `bash -c`.** The login shell re-sources the IDF export and swallows the rest of the command. Cost an hour to find; do not regress it. |
 | **Linux-target test binary never exits** | ESP-IDF's linux target keeps its scheduler running after `UNITY_END()`. Call `exit(failures)` explicitly, or the test hangs forever instead of failing. |
 | **gcovr reports 0 lines covered** | `gcovr -r .` does not find Ceedling's gcov data. Point it at `build/gcov/out` (or use Ceedling's own gcov report plugin). A 0 % report looks like a pass — verify it shows real numbers. |
+
+### Ceedling 1.1.0 specifics
+
+The image ships **Ceedling 1.1.0**. Configuration written from 0.x
+documentation fails, and each of these was hit for real:
+
+| Symptom | Cause |
+| --- | --- |
+| `:use_test_preprocessor is ':true' but must be one of {:none, :all, :tests, :mocks}` | 1.x replaced the boolean with an enum. Use `:all`. |
+| `Plugin 'stdout_pretty_tests_report' not found` | Renamed in 1.x to **`report_tests_pretty_stdout`**. |
+| `undefined reference to <fn>_ExpectAnyArgsAndReturn` / `_ReturnThruPtr_*` | Those helpers come from CMock plugins. Add **`:expect_any_args`** and **`:return_thru_ptr`** under `:cmock: :plugins:` — `:ignore` and `:callback` alone are not enough. |
+| `undefined reference` to a function that exists in the source tree | Ceedling links the `.c` **matching each header the test includes**. A function declared in `foo.h` but defined in `foo_extra.c` will not be linked. Keep one `.c` per public header, or include the header that maps to the defining file. |
+
+All four surface only when the suite is actually executed — which is why
+`docs/AGENT_BRIEF.md` §5 requires running it.
 | Build fails with Windows paths in errors | Host `build/` reused in container — use `build_container/` |
 | Files created as root on the host | Container UID not mapped |
 | Shell script "not found" despite valid path | CRLF line endings — `.gitattributes` forces LF; verify it applied |

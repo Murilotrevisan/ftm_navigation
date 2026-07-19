@@ -29,6 +29,18 @@ cd ../ftm-<phase>
 The exact branch name is in your phase document. Worktrees let phases run in
 parallel without fighting over the working directory.
 
+**Every file you create or edit lives inside your worktree.** Do not put some
+files there and others in the main checkout — split work is unreviewable and
+half of it will be lost. Before requesting review:
+
+```bash
+git -C <path-to-main-checkout> status --short   # must be clean
+git log main..HEAD --oneline                    # must be non-empty
+```
+
+**Commit as you go.** An uncommitted worktree is not deliverable work: it
+carries no message, no co-author trailer, and nothing for the reviewer to diff.
+
 ## 3. Environment
 
 Builds and host unit tests run **in the container**; flashing, E2E and manual
@@ -71,17 +83,72 @@ report rather than work around it.
 7. **Do not expand scope.** If the phase document omits something you believe is
    needed, record it in your report rather than building it.
 
-## 5. Definition of done
+## 5. The evidence rule
 
-- [ ] Every acceptance criterion in the phase document ticked, or explicitly
-      not-done with a reason.
+> **An acceptance criterion is ticked only when you have run the command and
+> pasted its output into the report.**
+
+- A file existing is **not** evidence.
+- "Should work", "is wired up", "is implemented" are **not** evidence.
+- Code you wrote but never executed is **not a deliverable**. A test harness
+  that has never been run does not count as delivered, however good the code
+  looks.
+
+If you deliver a harness, **run it until it passes**. Configuration written from
+memory or from documentation for a different version routinely fails on first
+execution; that is exactly what running it is for.
+
+Anything you could not run stays **explicitly unticked**, and the report says
+what you tried and what happened.
+
+## 6. Before you declare a blocker
+
+**A blocker is a claim about the environment, and claims get verified.** Run the
+checks below and paste their real output *before* writing that something is
+blocked. Misdiagnosing a blocker and then building around it wastes the whole
+phase.
+
+```powershell
+# Docker. NOTE: a freshly opened shell may not have docker on PATH even though
+# it is installed. That is a PATH problem, not a permissions problem.
+$env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+            [Environment]::GetEnvironmentVariable("Path","User")
+docker info --format '{{.ServerVersion}} / {{.OSType}}'
+docker run --rm ftm-dev:latest bash -c 'idf.py --version'
+
+# Boards — attached to the machine, not to a worktree
+Get-CimInstance Win32_PnPEntity |
+  Where-Object { $_.Name -match 'COM\d+' -and $_.DeviceID -match '303A' }
+
+# A board's MAC — one command, no firmware required
+.\.venv\Scripts\python.exe -m esptool --port COM3 read_mac
+```
+
+Rules that follow:
+
+- **Never record an inability in a normative document.** Do not edit
+  `docs/HARDWARE_FINDINGS.md` or `docs/CONTAINER.md` to say a value "was not
+  captured". Those documents hold verified facts. If you cannot obtain a value,
+  it goes in your report as an open item.
+- **"Permission denied" from a missing command is a PATH problem.** Check before
+  concluding otherwise.
+- If a check above genuinely fails, paste the failure and **stop**. Do not
+  design around an unverified blocker.
+
+## 7. Definition of done
+
+- [ ] Every acceptance criterion ticked **with pasted command output** (§5), or
+      explicitly not-done with what you tried.
+- [ ] Every harness you delivered has been **executed and passes**.
 - [ ] Full suite run — **every level, not just what you touched**.
-- [ ] Report written to `docs/reports/<branch-name>.md` (`docs/WORKFLOW.md` §6).
+- [ ] **All work committed on your branch**, in your worktree. `git log main..HEAD`
+      is non-empty; `git status` in the main worktree is clean.
 - [ ] Every commit carries `Co-Authored-By: <Model Name> <noreply@anthropic.com>`.
-- [ ] Branch pushed/left for human review. **Never merge to `main` yourself**,
-      even when everything is green.
+- [ ] Report written to `docs/reports/<branch-name>.md` (`docs/WORKFLOW.md` §6).
+- [ ] Branch left for human review. **Never merge to `main` yourself**, even
+      when everything is green.
 
-## 6. What the review will check
+## 8. What the review will check
 
 Your work is reviewed against the project's assumptions, not just whether it
 builds. Self-check these before requesting review:
@@ -117,7 +184,7 @@ builds. Self-check these before requesting review:
 - One claiming zero deviations and all-green is usually a report that did not
   look hard enough
 
-## 7. When blocked
+## 9. When blocked
 
 Stop and ask. Specifically, do not:
 

@@ -116,6 +116,33 @@ in `docs/TESTING.md` §2 forbids testing a module in both.
 Note `tests/` (not `test/`) — `docs/WORKFLOW.md` §4 fixes this location, and
 later agents rely on it to run the whole suite.
 
+## Task 0 — Pre-flight (do this first, paste the output)
+
+Before writing anything, prove the environment works and **paste each result
+into your report**. A previous attempt at this phase failed because it assumed
+blockers instead of checking:
+
+```powershell
+# 1. Docker. If `docker` is not found, that is PATH, not permissions.
+$env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+            [Environment]::GetEnvironmentVariable("Path","User")
+docker info --format '{{.ServerVersion}} / {{.OSType}}'      # expect: 29.x / linux
+
+# 2. The image runs
+docker run --rm ftm-dev:latest bash -c 'idf.py --version; ceedling version | head -3'
+
+# 3. Both boards enumerate
+Get-CimInstance Win32_PnPEntity |
+  Where-Object { $_.Name -match 'COM\d+' -and $_.DeviceID -match '303A' }
+
+# 4. Both MACs match docs/CONTAINER.md §6
+.\.venv\Scripts\python.exe -m esptool --port COM3 read_mac   # 14:63:93:8d:98:74
+.\.venv\Scripts\python.exe -m esptool --port COM4 read_mac   # 14:63:93:8d:96:e4
+```
+
+If any of these genuinely fails, paste the failure and **stop**. Do not design
+around it.
+
 ## Tasks
 
 1. **Install Docker Desktop** and build the image per `docs/CONTAINER.md`. Must
@@ -129,9 +156,15 @@ later agents rely on it to run the whole suite.
    (`ftm_result.h` + `ftm_result_to_string()`) and write a genuine test for it
    **including an out-of-range enum value**. Prove CMock generates a mock from a
    header.
+   - **Run `ceedling test:all` until it passes and paste the output.** Read
+     `docs/CONTAINER.md` §7 "Ceedling 1.1.0 specifics" first — four known
+     config traps live there, all of which only appear on execution.
 3. **L1b ESP-IDF linux-target harness** (container) targeting `components/
-   services/**`. Same approach: a minimal real module and a real test. Prove
-   `idf.py --preview set-target linux` builds and the test binary runs.
+   services/**`. Same approach: a minimal real module and a real test.
+   - **Run it.** Both `idf.py --preview set-target linux build` **and** the
+     resulting binary must be executed, with output pasted. The test must call
+     `exit(failures)` after `UNITY_END()`, or it hangs instead of failing
+     (`docs/CONTAINER.md` §7).
 4. **gcovr coverage** wired over L1a, output to `build_container/coverage/`
    as HTML + XML. Report the actual numbers; do **not** enforce the proposed
    thresholds as a hard gate yet (`docs/TESTING.md` §2).
@@ -157,44 +190,74 @@ later agents rely on it to run the whole suite.
    pass with **no hardware attached** — assert they never import `serial`.
 10. **`dev.ps1` routing.** Each subcommand goes to the right side (container vs.
     host venv) without the caller needing to know which.
-11. **Record both board MACs** in `docs/CONTAINER.md` §6. Board B is
-    `14:63:93:8d:96:e4`; Board A's is not yet captured.
+11. **Verify both board MACs** against `docs/CONTAINER.md` §6 (already recorded:
+    A = `14:63:93:8d:98:74`, B = `14:63:93:8d:96:e4`). Correct the document only
+    if a measurement disagrees.
 12. **Document every level** in `tests/README.md`: exact copy-pasteable command,
     **where it runs** (container or host venv), and expected duration so a slow
     suite is not mistaken for a hang.
 
 ## Required tests
 
-The harness's own reference tests must demonstrate the worst-case discipline,
-because they are the template every later phase copies:
+The reference tests are the template every later phase copies, so they must
+demonstrate worst-case discipline. Minimum set:
 
-- At least one test asserting an **error path**, not just a success path.
-- At least one **CMock-based** test showing a mocked dependency returning a
-  failure and the caller handling it.
-- The E2E smoke test must assert on **both** DUTs, and must **fail clearly** if
-  only one board is attached (not hang).
+**L1a (Ceedling, `domain/`)**
+- A known-good value.
+- An **out-of-range enum** value.
+- A **NULL argument** rejected.
+- A **buffer-too-small** case, asserting a canary byte past the limit is
+  untouched.
+- A **CMock** test where the mocked dependency **succeeds**, and another where
+  it **fails** and the caller handles it.
+
+**L1b (ESP-IDF linux target, `services/`)**
+- A nominal case.
+- The **clamp signature** from `HARDWARE_FINDINGS.md` §6: `valid=2, total=30`
+  must be judged unusable even though the session reported success.
+- The 0.8 quality boundary (`valid=24, total=30`).
+- **Impossible counts** (`valid > total`) rejected.
+
+**L3 (E2E)**
+- Asserts on **both** DUTs.
+- **Fails clearly** if only one board is attached — never hangs.
+
+Every one of these must be **executed**, not merely written
+(`docs/AGENT_BRIEF.md` §5).
 
 ## Acceptance criteria
 
+**Every box below requires pasted command output in the report**
+(`docs/AGENT_BRIEF.md` §5). A file existing is not evidence.
+
+- [ ] Task 0 pre-flight output pasted: Docker version, container `idf.py`,
+      both boards enumerated, both MACs.
 - [ ] Container builds firmware from a clean checkout with **no host ESP-IDF**
       involved.
-- [ ] `.\tools\dev.ps1 test-host` runs L1a + L1b green **in the container**,
-      with no board attached.
-- [ ] `.\tools\dev.ps1 coverage` produces a gcovr report; actual numbers
-      reported.
+- [ ] `.\tools\dev.ps1 test-host` runs **both L1a and L1b** green in the
+      container, with no board attached. Output pasted showing both suites and
+      their pass counts.
+- [ ] `.\tools\dev.ps1 coverage` produces a gcovr report with **non-zero
+      line counts** (a 0 % report is a wiring failure, not a pass).
 - [ ] `.\tools\dev.ps1 venv` creates `.venv/`; nothing installed into system or
       IDF Python.
 - [ ] `.\tools\dev.ps1 flash <role>` flashes the board matching that role's
-      **MAC** and fails loudly if it is absent.
+      **MAC** and fails loudly if it is absent. Demonstrate **both** the success
+      path and the missing-board path.
 - [ ] `.\tools\dev.ps1 e2e` runs the L3 smoke test against **both** boards from
-      the venv.
-- [ ] Disconnecting a board gives a **clear message**, not a hang.
+      the venv, asserting on both. Fixtures that unconditionally skip do not
+      satisfy this.
+- [ ] Disconnecting a board gives a **clear message**, not a hang — demonstrated.
 - [ ] Generated files on the host are owned by the user, not root.
 - [ ] Container has **no** device mapping and does not run privileged.
+- [ ] Every directory in the Deliverables tree exists, including
+      `tests/sim/`, `tests/manual/` and `tests/target_smoke/`. `dev.ps1` must
+      not reference a path that does not exist.
 - [ ] `tests/README.md` documents every level: command, where it runs, duration.
-- [ ] `docs/CONTAINER.md` §6 updated with both board MACs.
-- [ ] Work done on a `phase-0/...` branch; `main` untouched
-      (`docs/WORKFLOW.md` §1).
+- [ ] Board MACs in `docs/CONTAINER.md` §6 verified against hardware.
+- [ ] **All work committed on `phase-0/test-infra`, inside the phase worktree.**
+      `git log main..HEAD` non-empty; `git status` in the main checkout clean;
+      every commit carries the `Co-Authored-By` trailer.
 
 ## Decisions in force
 
