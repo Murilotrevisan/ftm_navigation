@@ -1,0 +1,81 @@
+# L1a -- Ceedling (Unity + CMock) over components/domain/ ONLY.
+#
+# Runs in the container: `.\tools\dev.ps1 test-host` (docs/CONTAINER.md).
+# Ruby and Ceedling live in the image, never on the PC.
+#
+# The division rule (docs/TESTING.md §2): domain/ belongs to this suite and
+# services/ belongs to tests/host_idf/. Never add a services/ path here -- a
+# module tested in both suites drifts, then disagrees.
+#
+# Written against Ceedling 1.1.0. Configuration copied from 0.x documentation
+# fails; see docs/CONTAINER.md §7 for the four traps this file already avoids.
+---
+:project:
+  :use_exceptions: FALSE
+  :use_test_preprocessor: :all          # 1.x enum, NOT the 0.x boolean
+  :use_auxiliary_dependencies: TRUE
+  :build_root: ../../build_container/ceedling
+  :test_file_prefix: test_
+  :default_tasks:
+    - test:all
+
+:environment: []
+
+:extension:
+  :executable: .out
+
+:paths:
+  :test:
+    - +:test/**
+  :source:
+    - ../../components/domain/types/src/**
+    - ../../components/domain/core/src/**
+  :include:
+    - ../../components/domain/types/include/**
+    - ../../components/domain/core/include/**
+
+:defines: {}          # 1.x wants a hash here, not the 0.x array
+
+:flags:
+  :test:
+    :compile:
+      :*:
+        - -std=c11
+        - -Wall
+        - -Wextra
+        - -Werror
+
+:cmock:
+  :mock_prefix: mock_
+  :when_no_prototypes: :warn
+  :enforce_strict_ordering: TRUE
+  :plugins:
+    - :ignore
+    - :callback
+    - :expect_any_args      # *_ExpectAnyArgsAndReturn lives here
+    - :return_thru_ptr      # *_ReturnThruPtr_* lives here
+  :treat_as:
+    uint8:  HEX8
+    uint16: HEX16
+    uint32: UINT32
+    int8:   INT8
+    bool:   UINT8
+
+:gcov:
+  # Instrumentation and the per-file console summary come from the plugin.
+  #
+  # Report GENERATION is deliberately NOT delegated to it. The plugin runs
+  # gcovr with :report_root defaulting to the working directory, which cannot
+  # see coverage data written to an out-of-tree :build_root -- it produces a
+  # report reading `lines-valid="0"`, and a 0 % report looks exactly like a
+  # pass (docs/CONTAINER.md §7). tools/dev.sh invokes gcovr explicitly with a
+  # root that resolves both the test and the domain sources, and asserts the
+  # line count is non-zero.
+  :reports: []
+  :utilities:
+    - gcovr
+
+:plugins:
+  :enabled:
+    - report_tests_pretty_stdout   # 1.x name; 0.x called it stdout_pretty_tests_report
+    - gcov
