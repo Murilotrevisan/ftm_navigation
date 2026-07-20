@@ -110,9 +110,40 @@ Rules:
 - Present tense, imperative subject: `add rolling median filter`.
 - Reference the phase: `phase-3b: add rolling median filter`.
 - Body explains **why**, not what — the diff shows what.
-- One logical change per commit.
 - Never commit `build/`, `sdkconfig`, or generated headers except the
   calibration table, which **is** committed for reproducibility.
+
+### Commit granularity
+
+**One logical change per commit, each reviewable on its own.** A phase is
+normally five to ten commits, not one or two.
+
+The test is not a line count, it is whether a reviewer can judge the commit
+without holding four unrelated things in their head at once. Concretely:
+
+1. **Never mix a move with an edit.** Relocate a file in one commit, change its
+   contents in the next. Git renders a rename plus an edit as
+   `{old => new}/file.c | 6 +`, which **hides the edit inside the relocation** —
+   the six changed lines cannot be read as a diff. This is the most damaging
+   version of the problem and the easiest to avoid.
+2. **Separate mechanically-generated or recorded data from code.** Test
+   fixtures, recordings and generated tables are reviewed differently from
+   logic; bundling them buries the logic.
+3. **Land tests with the code they test** — that pairing is one logical change,
+   not two (§4).
+4. **If the subject needs "and", it is probably two commits.** `add the tools,
+   and the fixtures, and the firmware move` is three.
+5. **Separate a refactor from a behaviour change**, always. A reviewer must be
+   able to see that a refactor changed nothing.
+
+Why this is enforced rather than suggested: the review gate (§2) and the
+regression rule (§3) both depend on being able to see *what changed and why*.
+A 1700-line commit spanning a firmware relocation, new tooling, recorded
+fixtures and a behaviour fix defeats both — it is reviewable only as "all of
+it or none of it", so problems get waved through in the bulk.
+
+Committing as you go also protects you: an uncommitted worktree carries no
+message, no trailer, and nothing to bisect.
 
 ### Co-author trailer
 

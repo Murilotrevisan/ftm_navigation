@@ -38,8 +38,14 @@ git -C <path-to-main-checkout> status --short   # must be clean
 git log main..HEAD --oneline                    # must be non-empty
 ```
 
-**Commit as you go.** An uncommitted worktree is not deliverable work: it
-carries no message, no co-author trailer, and nothing for the reviewer to diff.
+**Commit as you go, in small logical steps.** An uncommitted worktree is not
+deliverable work: it carries no message, no co-author trailer, and nothing for
+the reviewer to diff.
+
+A phase is normally **five to ten commits**, not one or two. In particular,
+**never mix a file move with an edit to that file** — git renders it as
+`{old => new}/file.c | 6 +` and the edit becomes unreadable inside the rename.
+Full rules in `docs/WORKFLOW.md` §5.
 
 ## 3. Environment
 
@@ -143,6 +149,9 @@ Rules that follow:
 - [ ] Full suite run — **every level, not just what you touched**.
 - [ ] **All work committed on your branch**, in your worktree. `git log main..HEAD`
       is non-empty; `git status` in the main worktree is clean.
+- [ ] Commits are **separable and individually reviewable** — no move mixed with
+      an edit, no single commit spanning unrelated concerns
+      (`docs/WORKFLOW.md` §5).
 - [ ] Every commit carries `Co-Authored-By: <Model Name> <noreply@anthropic.com>`.
 - [ ] Report written to `docs/reports/<branch-name>.md` (`docs/WORKFLOW.md` §6).
 - [ ] Branch left for human review. **Never merge to `main` yourself**, even
