@@ -1,0 +1,27 @@
+{
+  "_comment": [
+    "Role -> board identity. The NORMATIVE source for these MACs is",
+    "docs/CONTAINER.md §6; this file is the machine-readable copy that",
+    "tools/dev.ps1 and tests/e2e/conftest.py both read, so the mapping exists",
+    "exactly once in executable form.",
+    "",
+    "Bind roles to MAC, never to a port number: ports re-enumerate, and",
+    "flashing the wrong role onto the wrong board produces a system that looks",
+    "broken in a very confusing way.",
+    "",
+    "Board A's SoftAP BSSID is its base MAC + 1 (14:63:93:8d:98:75), which is a",
+    "useful cross-check when identifying which board is advertising."
+  ],
+  "roles": {
+    "responder": {
+      "mac": "14:63:93:8d:98:74",
+      "board": "A",
+      "note": "anchor / FTM responder"
+    },
+    "initiator": {
+      "mac": "14:63:93:8d:96:e4",
+      "board": "B",
+      "note": "mobile node / FTM initiator"
+    }
+  }
+}

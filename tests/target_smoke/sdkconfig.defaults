@@ -1,0 +1,22 @@
+# NON-NEGOTIABLE for every firmware in this repo (docs/PLAN.md §6,
+# docs/HARDWARE_FINDINGS.md §1): these boards expose only the built-in
+# USB-Serial-JTAG (VID 303A / PID 1001), not a UART bridge.
+#
+# Without this the failure is misleading rather than obvious -- boot logs
+# still appear on the COM port, but every write to the board times out,
+# because the firmware never reads that endpoint.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# ALSO non-negotiable, and NOT a default: CONFIG_ESP_WIFI_FTM_ENABLE is
+# `default n` in ESP-IDF v5.5.2 (components/esp_wifi/Kconfig:397). The
+# initiator and responder options are `default y` but they *depend on* this
+# one, so without it FTM is compiled out entirely and the symptom is a session
+# that simply never reports. Measured in Phase 0 -- see
+# docs/HARDWARE_FINDINGS.md §1.
+CONFIG_ESP_WIFI_FTM_ENABLE=y
+CONFIG_ESP_WIFI_FTM_INITIATOR_SUPPORT=y
+CONFIG_ESP_WIFI_FTM_RESPONDER_SUPPORT=y
+
+# Keep the boot banner terse so the E2E markers are easy to spot.
+CONFIG_BOOTLOADER_LOG_LEVEL_WARN=y
+CONFIG_BOOTLOADER_LOG_LEVEL=2
