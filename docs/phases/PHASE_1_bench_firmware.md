@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Not started |
+| **Status** | Implementation complete — rebased and full suite run; awaiting review |
 | **Depends on** | Nothing. May run in parallel with Phase 0. |
 | **Blocks** | Phase 2 |
 | **Branch** | `phase-1/bench-firmware` |
@@ -133,14 +133,14 @@ Lighter than product code, but not absent:
 
 ## Acceptance criteria
 
-- [ ] `tools/bench_firmware` builds and flashes to both COM3 and COM4.
-- [ ] `validate_board.py` runs autonomously and reports PASS on both boards.
-- [ ] It reports **FAIL with a useful message** when the boards are placed
+- [x] `tools/bench_firmware` builds and flashes to both COM3 and COM4.
+- [x] `validate_board.py` runs autonomously and reports PASS on both boards.
+- [x] It reports **FAIL with a useful message** when the boards are placed
       touching (clamp condition) — verify this by actually doing it.
-- [ ] Report leak fix present and commented.
-- [ ] `tools/bench_firmware/README.md` documents the validation procedure for a
+- [x] Report leak fix present and commented.
+- [x] `tools/bench_firmware/README.md` documents the validation procedure for a
       new board, start to finish.
-- [ ] Root `main/` no longer contains the example.
+- [x] Root `main/` no longer contains the example.
 
 ## Traps
 

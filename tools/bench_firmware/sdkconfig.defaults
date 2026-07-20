@@ -1,0 +1,12 @@
+CONFIG_ESP_WIFI_FTM_ENABLE=y
+
+# Detailed per-frame diagnostics are the purpose of this known-good bench tool.
+CONFIG_ESP_FTM_REPORT_LOG_ENABLE=y
+CONFIG_ESP_FTM_REPORT_SHOW_DIAG=y
+CONFIG_ESP_FTM_REPORT_SHOW_RTT=y
+CONFIG_ESP_FTM_REPORT_SHOW_T1T2T3T4=y
+CONFIG_ESP_FTM_REPORT_SHOW_RSSI=y
+
+# This devkit only exposes the built-in USB-Serial-JTAG port, so the console
+# REPL must live there instead of UART0 (whose pins are not broken out to USB).
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y

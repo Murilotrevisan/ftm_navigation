@@ -2,6 +2,8 @@
 
    This example code is in the Public Domain (or CC0 licensed, at your option.)
 
+   Preserved from ESP-IDF v5.5.2 examples/wifi/ftm as a known-good bench tool.
+
    Unless required by applicable law or agreed to in writing, this
    software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
    CONDITIONS OF ANY KIND, either express or implied.
@@ -646,10 +648,14 @@ static int wifi_cmd_ftm(int argc, char **argv)
     } else if (bits & FTM_FAILURE_BIT) {
         /* FTM Failure case */
         ESP_LOGE(TAG_STA, "FTM procedure failed!");
+        /* Upstream deviation: release the driver-owned report on failure too. */
+        esp_wifi_ftm_get_report(NULL, 0);
     } else {
         /* Timeout, end session gracefully */
         ESP_LOGE(TAG_STA, "FTM procedure timed out!");
         esp_wifi_ftm_end_session();
+        /* Upstream deviation: release the driver-owned report on timeout too. */
+        esp_wifi_ftm_get_report(NULL, 0);
     }
 
     return 0;

@@ -1,0 +1,38 @@
+ftm -I -s FTM_CLAMP
+I (1278) ftm_station: Scanning for FTM_CLAMP
+I (3778) ftm_station: sta scan done
+I (3778) ftm_station: Requesting FTM session with Frm Count - 32, Burst Period - 200mSec (0: No Preference)
+W (3778) wifi:Starting FTM session with 14:63:93:8d:98:75 in 58 mSec
+W (3778) wifi:Mode: non-ASAP, Bursts: 8, FTM's per burst: 4, Burst Period: 200mSec, Burst Duration: 32000uSec
+E (5258) wifi:No valid FTM Measurements found out of 28 received measurements!
+I (5258) ftm_station: FTM procedure with Peer(14:63:93:8d:98:75) failed! (Status - 5)
+E (5268) ftm_station: FTM procedure failed!
+ftm>
+ftm> ftm -I -s FTM_CLAMP
+W (5368) wifi:Haven't to connect to a suitable AP now!
+I (5368) ftm_station: Requesting FTM session with Frm Count - 32, Burst Period - 200mSec (0: No Preference)
+W (5378) wifi:Starting FTM session with 14:63:93:8d:98:75 in 100 mSec
+W (5378) wifi:Mode: non-ASAP, Bursts: 8, FTM's per burst: 4, Burst Period: 200mSec, Burst Duration: 32000uSec
+E (6898) wifi:No valid FTM Measurements found out of 29 received measurements!
+I (6898) ftm_station: FTM procedure with Peer(14:63:93:8d:98:75) failed! (Status - 5)
+E (6898) ftm_station: FTM procedure failed!
+ftm>
+ftm> ftm -I -s FTM_CLAMP
+W (7008) wifi:Haven't to connect to a suitable AP now!
+I (7008) ftm_station: Requesting FTM session with Frm Count - 32, Burst Period - 200mSec (0: No Preference)
+W (7018) wifi:Starting FTM session with 14:63:93:8d:98:75 in 102 mSec
+W (7018) wifi:Mode: non-ASAP, Bursts: 8, FTM's per burst: 4, Burst Period: 200mSec, Burst Duration: 32000uSec
+E (8558) wifi:No valid FTM Measurements found out of 29 received measurements!
+I (8558) ftm_station: FTM procedure with Peer(14:63:93:8d:98:75) failed! (Status - 5)
+E (8558) ftm_station: FTM procedure failed!
+ftm>
+ftm> ftm -I -s FTM_CLAMP
+W (8658) wifi:Haven't to connect to a suitable AP now!
+I (8658) ftm_station: Requesting FTM session with Frm Count - 32, Burst Period - 200mSec (0: No Preference)
+W (8668) wifi:Starting FTM session with 14:63:93:8d:98:75 in 84 mSec
+W (8668) wifi:Mode: non-ASAP, Bursts: 8, FTM's per burst: 4, Burst Period: 200mSec, Burst Duration: 32000uSec
+E (10188) wifi:No valid FTM Measurements found out of 29 received measurements!
+I (10188) ftm_station: FTM procedure with Peer(14:63:93:8d:98:75) failed! (Status - 5)
+E (10188) ftm_station: FTM procedure failed!
+ftm>
+ftm>

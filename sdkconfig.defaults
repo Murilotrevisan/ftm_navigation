@@ -1,6 +1,0 @@
-CONFIG_ESP_WIFI_FTM_ENABLE=y
-
-# This devkit only exposes the built-in USB-Serial-JTAG port, so the console
-# REPL must live there instead of UART0 (whose pins are not broken out to USB).
-CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
-
