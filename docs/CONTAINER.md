@@ -108,7 +108,7 @@ $env:Path = "C:\Users\murilo\.espressif\tools\idf-python\3.11.2;" + $env:Path
 .\tools\dev.ps1 venv            # create .venv and install test deps
 
 # Container: build + host unit tests
-.\tools\dev.ps1 build           # firmware build
+.\tools\dev.ps1 build           # current bench firmware build
 .\tools\dev.ps1 test-host       # Ceedling + ESP-IDF linux-target unit tests
 .\tools\dev.ps1 coverage        # gcovr report -> build_container/coverage/
 .\tools\dev.ps1 shell           # interactive shell in the container

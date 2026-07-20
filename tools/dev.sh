@@ -15,6 +15,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${REPO_ROOT}/build_container"
+FIRMWARE_DIR="${REPO_ROOT}/tools/bench_firmware"
 CEEDLING_DIR="${REPO_ROOT}/tests/host_ceedling"
 HOST_IDF_DIR="${REPO_ROOT}/tests/host_idf"
 COVERAGE_DIR="${BUILD_DIR}/coverage"
@@ -48,8 +49,8 @@ require_idf() {
 
 cmd_build() {
     require_idf
-    say "Firmware build (esp32c3) -> ${IDF_BUILD_DIR}"
-    cd "${REPO_ROOT}"
+    say "Bench firmware build (esp32c3) -> ${IDF_BUILD_DIR}"
+    cd "${FIRMWARE_DIR}"
     idf.py -B "${IDF_BUILD_DIR}" \
            -D SDKCONFIG="${IDF_BUILD_DIR}/sdkconfig" \
            set-target esp32c3 build
@@ -171,7 +172,7 @@ usage() {
 Usage: tools/dev.sh <command>
 
 Container-side commands (no hardware, ever):
-  build                 build the firmware for esp32c3   -> build_container/firmware
+  build                 build bench firmware for esp32c3 -> build_container/firmware
   target-build          build the L2 smoke app for esp32c3
   test-host             L1a (Ceedling) + L1b (IDF linux target)
   test-host-selfcheck   prove the L1b harness fails loudly instead of hanging

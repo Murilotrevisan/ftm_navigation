@@ -32,10 +32,11 @@ The Windows host tools under `tools/bench` now provide:
    part of flashing. A separate authoritative build was run in `ftm-dev`; this
    is the tension between the phase's required pre-Phase-0 wrapper and the
    project-wide container-build rule.
-4. The Phase 0 L1/L2/L3 pytest scaffolding was not available on this branch.
-   Phase 0 was running in parallel and its worktree still contained uncommitted
-   files. The complete test tree that exists on this branch was run, but the
-   later integration suite remains a merge-gate item.
+4. Phase 0 was unavailable during the original implementation, then was merged
+   before review. Rebasing onto `main` at `ed31100` exposed one integration
+   regression: `dev.ps1 build` still targeted the now-empty repository root.
+   The runner now builds the canonical `tools/bench_firmware` project, with a
+   regression test that verifies the configured project exists.
 
 ## Scope changes
 
@@ -44,8 +45,10 @@ The Windows host tools under `tools/bench` now provide:
 - Added `two_board.py --transcript` to save the bounded initiator transcript
   directly. This was needed to commit auditable real-data fixtures without
   treating terminal output as a recording.
-- No product firmware, `components/`, Docker, or Phase 0 scaffolding was added
-  or changed.
+- No product firmware, `components/`, or Docker files were changed. After the
+  Phase 0 merge, `tools/dev.sh`, its PowerShell help, and `docs/CONTAINER.md`
+  were updated only to route the existing `build` command to the moved bench
+  project. `tests/tools/test_dev_build_target.py` protects that integration.
 - The generated `sdkconfig`, dependency lock, host/container build trees, and
   Python caches were removed before commit.
 
@@ -223,62 +226,192 @@ Criterion: **met**.
 
 ## Test results
 
-### L1a — Ceedling host domain tests
+The branch was rebased onto Phase 0-complete `main` (`ed31100`) and every
+available automated level was run again.
 
-**Skipped.** Phase 0 was still running in parallel and no Ceedling suite exists
-in this branch. Verified before reporting:
+### Container firmware build
+
+Command:
+
+```powershell
+.\tools\dev.ps1 build
+```
+
+The first post-rebase run correctly exposed the stale root-project path:
 
 ```text
-## phase-0/test-infra
-?? components/
-?? docker/docker-compose.yml
-?? tests/
-?? tools/
+== Firmware build (esp32c3) -> /project/build_container/firmware
+CMakeLists.txt not found in project directory /project
+```
+
+After routing the runner to `tools/bench_firmware`, the final clean rerun
+completed in 71.9 s:
+
+```text
+== Bench firmware build (esp32c3) -> /project/build_container/firmware
+Running cmake in directory /project/build_container/firmware
+Building ESP-IDF components for target esp32c3
+ftm_measurement.bin binary size 0xcaaa0 bytes. Smallest app partition is 0x100000 bytes. 0x35560 bytes (21%) free.
+Project build complete.
+```
+
+### L1a — Ceedling host domain tests
+
+Command (runs L1a then L1b):
+
+```powershell
+.\tools\dev.ps1 test-host
+```
+
+Final rerun output (L1a portion, 10.83 s):
+
+```text
+✅ OVERALL TEST SUMMARY
+TESTED:  15
+PASSED:  15
+FAILED:   0
+IGNORED:  0
 ```
 
 ### L1b — ESP-IDF Linux-target host tests
 
-**Skipped for the same reason:** the Phase 0 harness was not committed or
-available on `main`.
+Final output from the same command:
+
+```text
+14 Tests 0 Failures 0 Ignored
+OK
+=== L1b finished: 0 failure(s) ===
+== L1a + L1b PASS
+```
+
+The deliberate failure-path integrity check also passed:
+
+```powershell
+.\tools\dev.ps1 test-host-selfcheck
+```
+
+```text
+15 Tests 1 Failures 0 Ignored
+FAIL
+== self-check OK: failing test -> exit code 1, no hang
+```
+
+### Coverage
+
+Command:
+
+```powershell
+.\tools\dev.ps1 coverage
+```
+
+Verbatim summary (19.6 s):
+
+```text
+lines: 100.0% (19 out of 19)
+functions: 100.0% (2 out of 2)
+branches: 91.7% (11 out of 12)
+== coverage report OK: 19 lines measured
+```
 
 ### L2 — on-target Unity
 
-**Skipped:** no Phase 0 target-test app exists on this branch.
+Build command:
+
+```powershell
+.\tools\dev.ps1 target-build
+```
+
+Verbatim summary (83.6 s):
+
+```text
+Successfully created esp32c3 image.
+ftm_target_smoke.bin binary size 0xb8390 bytes. Smallest app partition is 0x100000 bytes. 0x47c70 bytes (28%) free.
+Project build complete.
+```
+
+The L3 run below flashed this app to both boards and asserted each board's
+`FTM_TARGET_SMOKE_PASS failures=0` marker.
 
 ### L3 — physical-board validation
 
-The Phase 1 autonomous validator was run directly because the Phase 0
-pytest-embedded harness was not yet available. Results:
+Command:
+
+```powershell
+.\tools\dev.ps1 e2e
+```
+
+Verbatim output (32.88 s pytest time, 43.5 s command time):
+
+```text
+tests\e2e\test_harness_smoke.py::test_both_boards_boot_the_app PASSED    [ 33%]
+tests\e2e\test_harness_smoke.py::test_both_boards_pass_their_on_target_tests PASSED [ 66%]
+tests\e2e\test_harness_smoke.py::test_roles_are_bound_to_the_expected_boards PASSED [100%]
+======================= 3 passed, 3 warnings in 32.88s ========================
+```
+
+The original Phase 1 hardware evidence remains:
 
 - normal assigned roles: **PASS**, 8 sessions, 235 per-frame samples, 27.2 s;
 - physically touching clamp: **expected FAIL**, exit 1 with the required hint,
   4 sessions, 120 per-frame samples, 20.7 s.
 
-The verbatim outputs are in acceptance criteria 2 and 3.
+Those verbatim outputs are in acceptance criteria 2 and 3.
 
 ### L4 — Python host tools
 
 Command:
 
 ```powershell
-$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'
-.\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider tests
+.\tools\dev.ps1 tools-test
 ```
 
 Verbatim output:
 
 ```text
-...........                                                              [100%]
-11 passed in 0.07s
+collected 28 items
+tests\tools\test_dev_build_target.py::test_container_build_targets_the_moved_bench_firmware PASSED [ 42%]
+======================= 28 passed, 28 warnings in 0.19s =======================
 ```
 
-The full test tree present on this branch is **11 passed, 0 failed**. Plugin
-autoload and the cache provider were disabled to isolate the L4 tool suite;
-this does not skip any test collected from `tests/`.
+The warnings are pytest-embedded's experimental `record_xml_attribute` hook;
+there were no test failures.
 
 ### Lsim and L5
 
-Not applicable to Phase 1 and not present on this branch.
+Their directories are present but intentionally empty until later phases, as
+documented in their READMEs. There were no Lsim or L5 tests to execute.
+
+### Post-rebase Phase 1 validator recheck
+
+The container-built bench image was flashed through Phase 0's MAC-based runner
+to both boards, proving the two phases integrate:
+
+```text
+role 'responder' -> COM3
+MAC: 14:63:93:8d:98:74
+Hash of data verified.
+flashed 'responder' on COM3
+role 'initiator' -> COM4
+MAC: 14:63:93:8d:96:e4
+Hash of data verified.
+flashed 'initiator' on COM4
+```
+
+The immediate eight-session recheck at the fixed 1.00 m fixture exited 1
+because the hardware was in the already-documented all-zero drift/clamp state:
+
+```text
+COM3: 14:63:93:8d:98:74
+COM4: 14:63:93:8d:96:e4
+FAIL COM3 responder + COM4 initiator: 8 sessions, 224 per-frame RTT samples
+  ERROR: all sessions reported zero raw RTT
+  ERROR: boards too close? all reported distances are 0.00 m (FTM clamp condition)
+FAIL: board validation failed
+```
+
+This does not contradict the committed normal-spacing PASS fixture or
+`HARDWARE_FINDINGS.md` §8: the validator correctly rejected the live clamped
+measurement instead of producing a false PASS.
 
 ## Blockers encountered
 
@@ -302,11 +435,12 @@ DTR and RTS immediately after open, the same read produced the complete ESP32-C3
 boot log and `ftm>` prompt. The root cause was pyserial's initial control-line
 state holding USB-Serial-JTAG reset, not missing console configuration.
 
-### Full cross-level integration suite unavailable
+### Original full-suite integration gap (resolved)
 
 Phase 0 ran in parallel as requested. Its worktree had uncommitted scaffolding,
 so consuming it would have raced another agent and violated worktree isolation.
-This remains an integration merge-gate item, not a hidden pass.
+After Phase 0 merged, this branch was rebased onto `ed31100` and the complete
+available suite was run; results are recorded above.
 
 ### Shared-board contention with the parallel Phase 0 run
 
@@ -345,11 +479,9 @@ a clean hard reset.
 
 ## Open items
 
-1. After Phase 0 is committed and merged, rebase this branch again and run its
-   L1a, L1b, L2, and pytest-embedded L3 suites before approving a merge.
-2. Once Phase 0 releases both serial ports, optionally repeat the normal
-   assigned-role validation at the restored 1.00 m fixture. The committed
-   acceptance recording already contains the required eight-session PASS.
-3. Per-board fingerprints currently describe one assigned-role pair. A future
+1. The post-rebase live eight-session check at 1.00 m was all-zero/clamped.
+   Repeat later to observe whether the documented slow drift returns to the
+   non-zero region; do not weaken the validator to accommodate it.
+2. Per-board fingerprints currently describe one assigned-role pair. A future
    fleet with an independent known-good reference can isolate initiator and
    responder degradation more precisely.

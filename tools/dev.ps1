@@ -232,7 +232,7 @@ Usage: .\tools\dev.ps1 <command> [args]
 
 Container (build + host unit tests; never touches a board):
   setup                 build the ftm-dev image and print tool versions
-  build                 build the firmware for esp32c3
+  build                 build bench firmware for esp32c3
   target-build          build the L2 on-target smoke app
   test-host             L1a (Ceedling -> domain) + L1b (IDF linux -> services)
   test-host-selfcheck   prove the L1b harness fails loudly instead of hanging

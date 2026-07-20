@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Implementation complete — Phase 0 integration suite pending |
+| **Status** | Implementation complete — rebased and full suite run; awaiting review |
 | **Depends on** | Nothing. May run in parallel with Phase 0. |
 | **Blocks** | Phase 2 |
 | **Branch** | `phase-1/bench-firmware` |
