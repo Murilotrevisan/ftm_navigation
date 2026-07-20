@@ -73,9 +73,13 @@ ftm_measurement/
 │   ├── services/
 │   └── drivers/
 ├── docker/                       <- Phase 0: build/test container
-├── main/
 └── tests/                        <- all committed tests (WORKFLOW.md §4)
 ```
+
+There is deliberately **no ESP-IDF project at the repository root**. Phase 1
+moved the bench example into `tools/bench_firmware/`; the definitive firmware
+(Phase 3) lives in `components/` with its own project. A root `main/` would be
+ambiguous about which firmware it belongs to.
 
 ## 4. Phase overview
 
