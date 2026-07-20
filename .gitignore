@@ -23,6 +23,9 @@ build/
 # Windows CMake carries Windows absolute paths and fails inside Linux.
 build_container/
 **/build_container/
+# Host-side build dir used by tools/bench/idf.ps1 when flashing from Windows.
+build_host/
+**/build_host/
 *.o
 *.a
 *.out
