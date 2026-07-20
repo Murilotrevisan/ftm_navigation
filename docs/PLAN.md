@@ -83,7 +83,7 @@ Phases are ordered by dependency. Each is independently assignable.
 
 | Phase | Deliverable | Depends on | Doc |
 | --- | --- | --- | --- |
-| **0** | Container + test infrastructure | — | [PHASE_0](phases/PHASE_0_test_infra.md) |
+| **0** ✅ | Container + test infrastructure — **merged** | — | [PHASE_0](phases/PHASE_0_test_infra.md) |
 | **1** | Bench validation firmware in `tools/` | — | [PHASE_1](phases/PHASE_1_bench_firmware.md) |
 | **2** | Calibration firmware + tkinter UI → CSV | 1 | [PHASE_2](phases/PHASE_2_calibrator.md) |
 | **3** | Definitive layered firmware | 0, 2 | [PHASE_3](phases/PHASE_3_definitive_firmware.md) |

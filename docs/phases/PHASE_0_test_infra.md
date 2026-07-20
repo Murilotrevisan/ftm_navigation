@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Delivered, awaiting human review — `docs/reports/phase-0-test-infra.md` |
+| **Status** | **Complete** — merged to `main` (`a49781e`). Report: `docs/reports/phase-0-test-infra.md` |
 | **Depends on** | Nothing. May run in parallel with Phase 1. |
 | **Blocks** | Phase 3 (definitive firmware) |
 | **Branch** | `phase-0/test-infra` |
