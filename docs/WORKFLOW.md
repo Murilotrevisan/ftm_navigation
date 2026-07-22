@@ -150,11 +150,31 @@ message, no trailer, and nothing to bisect.
 Every commit ends with a trailer naming the model that produced it:
 
 ```
-Co-Authored-By: <Model Name> <noreply@anthropic.com>
+Co-Authored-By: <Model Name> <provider-email>
 ```
 
-Use the actual model, e.g. `Claude Opus 4.8`. This makes it possible to
-attribute behaviour to a specific model when reviewing history later.
+**The email must match the provider**, so git attributes the commit to the
+right account and history can be filtered by model:
+
+| Provider | Email |
+| --- | --- |
+| Claude (Anthropic) | `noreply@anthropic.com` |
+| Codex (OpenAI) | `codex-noreply@openai.com` |
+| Gemini (Google) | `gemini-codex@google.com` |
+
+Use the actual model name, e.g. `Claude Opus 4.8`, `GPT-5 Codex`,
+`Gemini 2.5 Pro`. Examples:
+
+```
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Co-Authored-By: GPT-5 Codex <codex-noreply@openai.com>
+Co-Authored-By: Gemini 2.5 Pro <gemini-codex@google.com>
+```
+
+**Do not use the Anthropic email for a non-Claude model.** An earlier version of
+this section hardcoded `noreply@anthropic.com` for every model, which silently
+misattributed Codex and Gemini commits to Anthropic. The email is the field git
+keys attribution on — a wrong email defeats the entire point of the trailer.
 
 ## 6. The work report
 

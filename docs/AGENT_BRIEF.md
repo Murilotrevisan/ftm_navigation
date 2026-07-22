@@ -152,7 +152,10 @@ Rules that follow:
 - [ ] Commits are **separable and individually reviewable** — no move mixed with
       an edit, no single commit spanning unrelated concerns
       (`docs/WORKFLOW.md` §5).
-- [ ] Every commit carries `Co-Authored-By: <Model Name> <noreply@anthropic.com>`.
+- [ ] Every commit carries `Co-Authored-By: <Model Name> <provider-email>`, with
+      the email matching **your** provider — Anthropic `noreply@anthropic.com`,
+      OpenAI `codex-noreply@openai.com`, Google `gemini-codex@google.com`. Never
+      use the Anthropic email for a non-Claude model (`docs/WORKFLOW.md` §5).
 - [ ] Report written to `docs/reports/<branch-name>.md` (`docs/WORKFLOW.md` §6).
 - [ ] Branch left for human review. **Never merge to `main` yourself**, even
       when everything is green.
